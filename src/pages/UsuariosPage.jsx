@@ -296,10 +296,7 @@ export default function UsuariosPage() {
               Novo usuário
             </div>
 
-            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-amber-800 text-sm">
-              Certifique-se de que a <strong>confirmação de e-mail está desativada</strong> no Supabase
-              (Authentication → Providers → Email) para o cadastro funcionar imediatamente.
-            </div>
+
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
