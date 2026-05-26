@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 
 import { ToastProvider }           from './components/ui/ToastProvider.jsx';
@@ -19,7 +19,6 @@ import Dashboard           from './pages/Dashboard.jsx';
 
 const TEMPO_INATIVIDADE = 15 * 60 * 1000;
 
-// Rota inicial por perfil ao abrir/reabrir o sistema
 const HOME_POR_PERFIL = {
   MASTER:       '/gestao-plantoes',
   ADMIN:        '/gestao-plantoes',
@@ -41,7 +40,6 @@ const ROUTE_PERFIS = {
   '/relatorios':      ['MASTER', 'ADMIN'],
 };
 
-// ── Tela de troca de senha ────────────────────────────────────
 function ChangePasswordScreen({ isForced }) {
   const { trocarSenha, logout } = useAuth();
   const [p1, setP1]         = useState('');
@@ -104,7 +102,6 @@ function ChangePasswordScreen({ isForced }) {
   );
 }
 
-// ── Rota protegida ────────────────────────────────────────────
 function Rota({ path, element }) {
   const { perfil } = useAuth();
   const permitidos = ROUTE_PERFIS[path] || [];
@@ -114,38 +111,12 @@ function Rota({ path, element }) {
   return element;
 }
 
-// ── Tela de erro de perfil ────────────────────────────────────
-function SemPerfilScreen() {
-  const { logout, session } = useAuth();
-  return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 text-center border border-slate-200 space-y-4">
-        <div className="text-4xl">⚠️</div>
-        <div className="text-base font-bold text-slate-900">Perfil não encontrado</div>
-        <p className="text-slate-500 text-sm leading-relaxed">
-          Sessão autenticada, mas nenhum perfil ativo foi encontrado na tabela <code className="bg-slate-100 px-1 rounded">usuarios</code>.
-        </p>
-        <p className="text-xs font-mono text-slate-400 bg-slate-50 rounded-lg p-2 break-all">
-          auth_user_id: {session?.user?.id}
-        </p>
-        <button onClick={logout}
-          className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition">
-          Sair e tentar novamente
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── App protegido ─────────────────────────────────────────────
 function ProtectedApp() {
   const { session, usuario, loading, mustChange, perfil, logout } = useAuth();
   const timeoutRef    = useRef(null);
-  const redirected    = useRef(false);   // garante redirect só na abertura
+  const redirected    = useRef(false);
   const [changingPass, setChangingPass] = useState(false);
-  const navigate = useNavigate();
 
-  // Inatividade
   useEffect(() => {
     if (!session) return;
     const reset = () => {
@@ -167,17 +138,6 @@ function ProtectedApp() {
     };
   }, [session, logout]);
 
-  // Redireciona para home do perfil ao abrir o sistema
-  // (evita abrir na última URL visitada)
-  useEffect(() => {
-    if (!loading && usuario && perfil && !redirected.current) {
-      redirected.current = true;
-      const home = HOME_POR_PERFIL[perfil] || '/gestao-plantoes';
-      navigate(home, { replace: true });
-    }
-  }, [loading, usuario, perfil, navigate]);
-
-  // ── Tela de carregamento ──────────────────────────────────
   if (loading || usuario === undefined) {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center gap-3">
@@ -187,15 +147,17 @@ function ProtectedApp() {
     );
   }
 
-  if (!session)  return <LoginPage />;
-  if (!usuario)  return <SemPerfilScreen />;
-  if (mustChange) return <ChangePasswordScreen isForced />;
+  if (!session) return <LoginPage />;
+  if (!usuario && !mustChange) return <LoginPage />;
+  if (mustChange)   return <ChangePasswordScreen isForced />;
   if (changingPass) return <ChangePasswordScreen isForced={false} />;
+
+  const home = HOME_POR_PERFIL[perfil] || '/gestao-plantoes';
 
   return (
     <MainLayout onChangePass={() => setChangingPass(true)}>
       <Routes>
-        <Route path="/"                element={<Navigate to={HOME_POR_PERFIL[perfil] || '/gestao-plantoes'} replace />} />
+        <Route path="/"                element={<Navigate to={home} replace />} />
         <Route path="/dashboard"       element={<Rota path="/dashboard"       element={<Dashboard />} />} />
         <Route path="/usuarios"        element={<Rota path="/usuarios"        element={<UsuariosPage />} />} />
         <Route path="/prestadores"     element={<Rota path="/prestadores"     element={<PrestadoresPage />} />} />
@@ -212,7 +174,7 @@ function ProtectedApp() {
             <p className="text-slate-500 mt-2 text-sm">Em desenvolvimento.</p>
           </div>
         } />} />
-        <Route path="*" element={<Navigate to={HOME_POR_PERFIL[perfil] || '/gestao-plantoes'} replace />} />
+        <Route path="*" element={<Navigate to={home} replace />} />
       </Routes>
     </MainLayout>
   );
