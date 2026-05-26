@@ -120,23 +120,23 @@ export default function ImpressaoEscalaPage() {
 
   // Estilos inline para impressão
   const th = {
-    background: '#1a237e', color: '#fff', padding: '6px 4px',
-    fontSize: 11, fontWeight: 700, textAlign: 'center',
+    background: '#1a237e', color: '#fff', padding: '4px 3px',
+    fontSize: 10, fontWeight: 700, textAlign: 'center',
     border: '1px solid #ccc',
   };
   const td = {
-    border: '1px solid #ddd', padding: '3px 4px',
-    fontSize: 10, verticalAlign: 'top', minHeight: 24,
+    border: '1px solid #ddd', padding: '2px 3px',
+    fontSize: 9, verticalAlign: 'top', minHeight: 16,
     whiteSpace: 'pre-wrap', wordBreak: 'break-word',
   };
   const tdTurno = {
     ...td, fontWeight: 700, background: '#f5f5f5',
-    fontSize: 10, whiteSpace: 'nowrap', textAlign: 'left',
-    width: 52, color: '#1a237e',
+    fontSize: 9, whiteSpace: 'nowrap', textAlign: 'left',
+    width: 46, color: '#1a237e',
   };
   const tdNum = {
     ...td, textAlign: 'center', fontWeight: 700,
-    background: '#e8eaf6', color: '#1a237e', fontSize: 11,
+    background: '#e8eaf6', color: '#1a237e', fontSize: 10,
   };
   const tdVazio = { ...td, background: '#fafafa' };
 
@@ -221,10 +221,13 @@ export default function ImpressaoEscalaPage() {
         </table>
 
         {/* Rodapé */}
-        <div style={{ marginTop:16, borderTop:'1px solid #ddd', paddingTop:10,
+        <div style={{ marginTop:24, borderTop:'1px solid #ddd', paddingTop:16,
           display:'flex', justifyContent:'space-between', fontSize:10, color:'#888' }}>
           <span>Gerado em {new Date().toLocaleDateString('pt-BR')}</span>
-          <span>________________________________________<br/>Responsável pela escala</span>
+          <div style={{textAlign:'center'}}>
+            <div style={{marginBottom:40}}>________________________________________</div>
+            <div style={{fontSize:10, color:'#555'}}>Responsável pela escala</div>
+          </div>
         </div>
       </div>
     </div>
