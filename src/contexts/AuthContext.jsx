@@ -1,8 +1,5 @@
-// ── Auth via REST direto — mesmo padrão do IAC ───────────────
-// Sem SDK, sem onAuthStateChange, sem race conditions.
-// Login → busca perfil imediatamente → estado atualizado.
-
 import { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { TENANT_ID } from '../config';
 
 const AuthContext = createContext(null);
@@ -13,16 +10,7 @@ const SCHEMA  = import.meta.env.VITE_SUPABASE_SCHEMA || 'appescala';
 
 const SESSION_KEY = 'gestaoescala-session';
 
-// ── Helpers REST ──────────────────────────────────────────────
-function headers(token) {
-  return {
-    'Content-Type':   'application/json',
-    apikey:           SB_KEY,
-    Authorization:    `Bearer ${token || SB_KEY}`,
-    'Accept-Profile': SCHEMA,
-  };
-}
-
+// ── REST helpers ──────────────────────────────────────────────
 async function restSignIn(email, password) {
   const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
     method: 'POST',
@@ -31,7 +19,7 @@ async function restSignIn(email, password) {
   });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error_description || d.message || 'Credenciais inválidas');
-  return d;
+  return d; // { access_token, refresh_token, user, ... }
 }
 
 async function restSignOut(token) {
@@ -58,24 +46,25 @@ async function restUpdatePassword(token, newPass) {
 async function buscarPerfil(token, authUserId) {
   try {
     const url = `${SB_URL}/rest/v1/usuarios?auth_user_id=eq.${authUserId}&ativo=eq.true&limit=1`;
-    const r = await fetch(url, { headers: headers(token) });
-    if (!r.ok) {
-      console.error('[Auth] Erro buscar perfil:', r.status, await r.text());
-      return null;
-    }
+    const r = await fetch(url, {
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${token}`,
+        'Accept-Profile': SCHEMA,
+      },
+    });
+    if (!r.ok) { console.error('[Auth] buscarPerfil:', r.status); return null; }
     const data = await r.json();
-    const perfil = Array.isArray(data) ? (data[0] || null) : null;
-    console.log('[Auth] Perfil:', perfil?.perfil || 'não encontrado');
-    return perfil;
+    return Array.isArray(data) ? (data[0] || null) : null;
   } catch (e) {
-    console.error('[Auth] buscarPerfil falhou:', e.message);
+    console.error('[Auth] buscarPerfil erro:', e.message);
     return null;
   }
 }
 
-// ── Persistência de sessão no localStorage ───────────────────
-function salvarSessao(token, user) {
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ token, user })); } catch {}
+// ── Persistência ──────────────────────────────────────────────
+function salvarSessao(token, refreshToken, user) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ token, refreshToken, user })); } catch {}
 }
 function lerSessao() {
   try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; }
@@ -84,31 +73,43 @@ function limparSessao() {
   try { localStorage.removeItem(SESSION_KEY); } catch {}
 }
 
+// ── Sincroniza token com o SDK do Supabase ────────────────────
+// Isso faz com que supabase.from('tabela') nas páginas use o token
+// correto em vez de rodar como anon
+async function sincronizarSDK(token, refreshToken) {
+  try {
+    await supabase.auth.setSession({
+      access_token:  token,
+      refresh_token: refreshToken || '',
+    });
+  } catch (e) {
+    console.warn('[Auth] sincronizarSDK falhou:', e.message);
+  }
+}
+
 // ── Provider ──────────────────────────────────────────────────
 export function AuthProvider({ children }) {
   const [token,      setToken]      = useState(null);
   const [authUser,   setAuthUser]   = useState(null);
-  const [usuario,    setUsuario]    = useState(undefined); // undefined = carregando
+  const [usuario,    setUsuario]    = useState(undefined);
   const [loading,    setLoading]    = useState(true);
   const [mustChange, setMustChange] = useState(false);
 
-  // Na montagem: verifica sessão salva no localStorage
   useEffect(() => {
-    async function restaurarSessao() {
+    async function restaurar() {
       const saved = lerSessao();
       if (!saved?.token || !saved?.user?.id) {
         setUsuario(null);
         setLoading(false);
         return;
       }
+      // Sincroniza SDK antes de buscar perfil (queries das páginas funcionam)
+      await sincronizarSDK(saved.token, saved.refreshToken);
 
-      console.log('[Auth] Restaurando sessão...');
       const perfil = await buscarPerfil(saved.token, saved.user.id);
-
       if (!perfil) {
-        // Token expirado ou perfil não encontrado — limpa e vai pro login
-        console.warn('[Auth] Sessão inválida, limpando...');
         limparSessao();
+        await supabase.auth.signOut();
         setUsuario(null);
       } else {
         const forceChange = saved.user.user_metadata?.must_change_password === true;
@@ -119,18 +120,20 @@ export function AuthProvider({ children }) {
       }
       setLoading(false);
     }
-    restaurarSessao();
+    restaurar();
   }, []);
 
-  // ── Login ────────────────────────────────────────────────
   async function login(email, senha) {
     const data = await restSignIn(email, senha);
-    // data = { access_token, user, ... }
     const tok  = data.access_token;
+    const ref  = data.refresh_token || '';
     const user = data.user;
     const forceChange = user?.user_metadata?.must_change_password === true;
 
-    salvarSessao(tok, user);
+    // Sincroniza SDK ANTES de qualquer query nas páginas
+    await sincronizarSDK(tok, ref);
+
+    salvarSessao(tok, ref, user);
     setToken(tok);
     setAuthUser(user);
     setMustChange(forceChange);
@@ -143,40 +146,37 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ── Logout ───────────────────────────────────────────────
   async function logout() {
     if (token) await restSignOut(token);
     limparSessao();
+    await supabase.auth.signOut();
     setToken(null);
     setAuthUser(null);
     setUsuario(null);
     setMustChange(false);
   }
 
-  // ── Troca de senha ───────────────────────────────────────
   async function trocarSenha(novaSenha) {
     if (!token) throw new Error('Sem sessão ativa');
     await restUpdatePassword(token, novaSenha);
-
-    // Atualiza metadata local
-    const novoUser = { ...authUser, user_metadata: { ...(authUser?.user_metadata || {}), must_change_password: false } };
-    salvarSessao(token, novoUser);
+    const novoUser = {
+      ...authUser,
+      user_metadata: { ...(authUser?.user_metadata || {}), must_change_password: false },
+    };
+    salvarSessao(token, null, novoUser);
     setAuthUser(novoUser);
     setMustChange(false);
-
-    // Recarrega perfil
     if (authUser?.id) {
       const perfil = await buscarPerfil(token, authUser.id);
       setUsuario(perfil);
     }
   }
 
-  // ── Helpers de perfil ────────────────────────────────────
-  const session    = token ? { access_token: token, user: authUser } : null;
-  const perfil     = usuario?.perfil || null;
-  const isMaster   = perfil === 'MASTER';
-  const isAdmin    = perfil === 'ADMIN' || isMaster;
-  const isOperador = perfil === 'OPERADOR';
+  const session      = token ? { access_token: token, user: authUser } : null;
+  const perfil       = usuario?.perfil || null;
+  const isMaster     = perfil === 'MASTER';
+  const isAdmin      = perfil === 'ADMIN' || isMaster;
+  const isOperador   = perfil === 'OPERADOR';
   const isVisualizador = perfil === 'VISUALIZADOR';
 
   return (
