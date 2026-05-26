@@ -1,63 +1,102 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Plus,
-  Pencil,
-  Search,
-  Eraser,
-  Copy,
-  Mail,
-  UserX,
-  UserCheck,
-  KeyRound,
-} from 'lucide-react';
-
 import { _sb } from '../lib/sb';
 import { useAuth } from '../contexts/AuthContext.jsx';
-
-import Button from '../components/ui/Button.jsx';
-import Card from '../components/ui/Card.jsx';
+import { TENANT_ID } from '../config';
+import Button     from '../components/ui/Button.jsx';
+import Card       from '../components/ui/Card.jsx';
 import PageHeader from '../components/ui/PageHeader.jsx';
 import { useToast } from '../components/ui/ToastProvider.jsx';
 
-const TENANT_ID = '7190dac7-342c-408f-81df-890c194ccfad';
-const EMAIL_MASTER = 'bfmca@hotmail.com';
-
-const perfis = [
-  { value: 'ADMIN', label: 'Admin' },
-  { value: 'OPERADOR', label: 'Operador' },
+// ── Configuração de perfis ─────────────────────────────────────
+const PERFIS = [
+  { value: 'ADMIN',        label: 'Admin'        },
+  { value: 'OPERADOR',     label: 'Operador'     },
   { value: 'VISUALIZADOR', label: 'Visualizador' },
 ];
 
-const formInicial = {
-  id: null,
-  nome: '',
-  email: '',
-  perfil: 'VISUALIZADOR',
-  ativo: true,
+// MASTER não aparece na lista — só existe um por tenant
+const PERFIL_STYLE = {
+  MASTER:       { bg: '#EDE9FE', cl: '#5B21B6' },
+  ADMIN:        { bg: '#E0E7FF', cl: '#3730A3' },
+  OPERADOR:     { bg: '#E0F2FE', cl: '#0369A1' },
+  VISUALIZADOR: { bg: '#F1F5F9', cl: '#475569' },
 };
+
+// E-mail do usuário MASTER — protegido contra edição
+const EMAIL_MASTER = 'educacaobt@gmail.com';
+
+const ini = nome => String(nome || 'U').split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+
+function gerarSenhaProvisoria() {
+  const maiusculas = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const minusculas = 'abcdefghjkmnpqrstuvwxyz';
+  const numeros    = '23456789';
+  const especiais  = '!@#';
+  const todos      = maiusculas + minusculas + numeros + especiais;
+  const rand       = s => s[Math.floor(Math.random() * s.length)];
+
+  let senha = rand(maiusculas) + rand(maiusculas) + rand(minusculas) + rand(minusculas)
+            + rand(numeros) + rand(numeros) + rand(especiais);
+
+  while (senha.length < 10) senha += todos[Math.floor(Math.random() * todos.length)];
+  return senha.split('').sort(() => Math.random() - 0.5).join('');
+}
+
+function BadgePerfil({ perfil }) {
+  const s = PERFIL_STYLE[perfil] || { bg: '#F1F5F9', cl: '#475569' };
+  const l = PERFIS.find(p => p.value === perfil)?.label || perfil;
+  return (
+    <span style={{ background: s.bg, color: s.cl, fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600, whiteSpace: 'nowrap' }}>
+      {l}
+    </span>
+  );
+}
+
+function StatusDot({ ativo }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${ativo ? 'text-emerald-700' : 'text-slate-400'}`}>
+      <span className={`w-2 h-2 rounded-full ${ativo ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+      {ativo ? 'Ativo' : 'Inativo'}
+    </span>
+  );
+}
+
+const iSx = { width: '100%', fontSize: 13, padding: '9px 12px', border: '1.5px solid #CBD5E1', borderRadius: 8, background: '#fff', color: '#0F172A', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' };
 
 export default function UsuariosPage() {
   const toast = useToast();
   const { session } = useAuth();
   const token = session?.access_token || null;
 
-  const [usuarios, setUsuarios] = useState([]);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [aba,        setAba]        = useState('ativos');
+  const [usuarios,   setUsuarios]   = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [showForm,   setShowForm]   = useState(false);
+  const [editId,     setEditId]     = useState(null);
+  const [saving,     setSaving]     = useState(false);
+  const [newCred,    setNewCred]    = useState(null);
+  const [resetOk,    setResetOk]    = useState(null);
+  const [confirm,    setConfirm]    = useState(null); // usuário para inativar/reativar
 
-  const [busca, setBusca] = useState('');
+  // Campos — novo usuário
+  const [fNome,   setFNome]   = useState('');
+  const [fEmail,  setFEmail]  = useState('');
+  const [fPerfil, setFPerfil] = useState('OPERADOR');
+
+  // Campos — edição
+  const [eNome,   setENome]   = useState('');
+  const [ePerfil, setEPerfil] = useState('OPERADOR');
+
+  // Filtros de busca
+  const [busca,        setBusca]        = useState('');
   const [filtroPerfil, setFiltroPerfil] = useState('todos');
-  const [aba, setAba] = useState('ativos');
 
-  const [form, setForm] = useState(formInicial);
-  const [senhaProvisoria, setSenhaProvisoria] = useState('');
-
-  useEffect(() => {
-    buscarUsuarios();
-  }, []);
+  useEffect(() => { buscarUsuarios(); }, [aba]);
 
   async function buscarUsuarios() {
+    setLoading(true);
     try {
+      const isAtivo = aba === 'ativos';
       const data = await _sb
         .from('usuarios', token)
         .select('*')
@@ -65,632 +104,416 @@ export default function UsuariosPage() {
         .eq('oculto', false)
         .order('nome');
 
-      setUsuarios(data || []);
-    } catch (error) {
-      console.error(error);
-      toast.error(
-        'Erro ao carregar usuários',
-        error?.message || 'Falha ao carregar.'
+      // Filtra ativos/inativos no front (pode ser null em contas recém-criadas)
+      const filtrado = (data || []).filter(u =>
+        isAtivo ? (u.ativo === true || u.ativo === null) : u.ativo === false
       );
+      setUsuarios(filtrado);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao carregar usuários', err?.message || 'Falha na consulta.');
+    } finally {
+      setLoading(false);
     }
   }
 
   const usuariosFiltrados = useMemo(() => {
-    return usuarios.filter((usuario) => {
-      const abaOk = aba === 'ativos' ? usuario.ativo : !usuario.ativo;
-
-      const texto = `
-        ${usuario.nome || ''}
-        ${usuario.email || ''}
-        ${usuario.perfil || ''}
-      `.toLowerCase();
-
-      const buscaOk = !busca || texto.includes(busca.toLowerCase());
-
-      const perfilOk =
-        filtroPerfil === 'todos' ? true : usuario.perfil === filtroPerfil;
-
-      return abaOk && buscaOk && perfilOk;
+    return usuarios.filter(u => {
+      const texto = `${u.nome || ''} ${u.email || ''} ${u.perfil || ''}`.toLowerCase();
+      const buscaOk   = !busca || texto.includes(busca.toLowerCase());
+      const perfilOk  = filtroPerfil === 'todos' || u.perfil === filtroPerfil;
+      return buscaOk && perfilOk;
     });
-  }, [usuarios, busca, filtroPerfil, aba]);
+  }, [usuarios, busca, filtroPerfil]);
 
-  function novoUsuario() {
-    setForm(formInicial);
-    setSenhaProvisoria('');
-    setModalOpen(true);
-  }
-
-  function editarUsuario(usuario) {
-    if (usuario.email === EMAIL_MASTER) {
-      toast.warning(
-        'Usuário protegido',
-        'O usuário master não pode ser editado por esta tela.'
-      );
+  // ── Criar usuário ──────────────────────────────────────────
+  async function criarUsuario() {
+    if (!fNome.trim() || !fEmail.trim()) {
+      toast.warning('Campos obrigatórios', 'Preencha nome e e-mail.');
       return;
     }
-
-    setForm({
-      id: usuario.id,
-      nome: usuario.nome || '',
-      email: usuario.email || '',
-      perfil: usuario.perfil || 'VISUALIZADOR',
-      ativo: usuario.ativo,
-    });
-
-    setSenhaProvisoria('');
-    setModalOpen(true);
-  }
-
-  function limparFiltros() {
-    setBusca('');
-    setFiltroPerfil('todos');
-  }
-
-  function gerarSenhaProvisoria() {
-    const maiusculas = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-    const minusculas = 'abcdefghjkmnpqrstuvwxyz';
-    const numeros = '23456789';
-    const especiais = '!@#';
-    const todos = maiusculas + minusculas + numeros + especiais;
-
-    let senha = '';
-    senha += maiusculas[Math.floor(Math.random() * maiusculas.length)];
-    senha += minusculas[Math.floor(Math.random() * minusculas.length)];
-    senha += numeros[Math.floor(Math.random() * numeros.length)];
-    senha += especiais[Math.floor(Math.random() * especiais.length)];
-
-    while (senha.length < 10) {
-      senha += todos[Math.floor(Math.random() * todos.length)];
-    }
-
-    return senha
-      .split('')
-      .sort(() => Math.random() - 0.5)
-      .join('');
-  }
-
-  async function salvarUsuario() {
-    if (!form.nome.trim()) {
-      toast.warning('Nome obrigatório', 'Informe o nome do usuário.');
-      return;
-    }
-
-    if (!form.email.trim()) {
-      toast.warning('E-mail obrigatório', 'Informe o e-mail do usuário.');
-      return;
-    }
-
+    setSaving(true);
     try {
-      setSaving(true);
-
-      if (form.id) {
-        await _sb
-          .from('usuarios', token)
-          .update({
-            nome: form.nome.trim(),
-            perfil: form.perfil,
-            ativo: form.ativo,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', form.id);
-
-        toast.success('Usuário atualizado', 'Cadastro salvo com sucesso.');
-
-        setModalOpen(false);
-        setForm(formInicial);
-        await buscarUsuarios();
-        return;
-      }
-
       const senha = gerarSenhaProvisoria();
 
-      const authData = await _sb.signUp(
-        form.email.trim().toLowerCase(),
-        senha,
-        {
-          nome: form.nome.trim(),
-          perfil: form.perfil,
-        }
-      );
+      // 1. Cria no Supabase Auth (via REST — não afeta sessão do admin)
+      const authData = await _sb.signUp(fEmail.trim().toLowerCase(), senha, {
+        nome: fNome.trim(),
+        perfil: fPerfil,
+        must_change_password: true, // força troca no primeiro acesso
+      });
 
-      const uid =
-        authData?.user?.id || authData?.id || authData?.data?.user?.id;
+      const uid = authData?.user?.id || authData?.id || authData?.data?.user?.id;
 
       if (!uid) {
         toast.error(
-          'Erro ao criar usuário',
-          'O Supabase não retornou o ID. Confirme se a confirmação de e-mail está desativada.'
+          'Usuário criado mas ID não retornado',
+          'Verifique se "Confirm email" está desativado em Authentication → Providers → Email no Supabase.'
         );
         return;
       }
 
+      // 2. Insere perfil na tabela usuarios
       await _sb.from('usuarios', token).insert({
-        tenant_id: TENANT_ID,
+        tenant_id:    TENANT_ID,
         auth_user_id: uid,
-        nome: form.nome.trim(),
-        email: form.email.trim().toLowerCase(),
-        perfil: form.perfil,
-        oculto: false,
-        ativo: true,
+        nome:         fNome.trim(),
+        email:        fEmail.trim().toLowerCase(),
+        perfil:       fPerfil,
+        oculto:       false,
+        ativo:        true,
       });
 
-      setSenhaProvisoria(senha);
+      setNewCred({ nome: fNome.trim(), email: fEmail.trim().toLowerCase(), senha });
+      setFNome(''); setFEmail(''); setFPerfil('OPERADOR');
+      setShowForm(false);
 
-      toast.success('Usuário criado', 'Usuário criado e vinculado ao sistema.');
-
-      await buscarUsuarios();
-    } catch (error) {
-      console.error(error);
-
-      toast.error(
-        'Erro ao salvar usuário',
-        error?.msg ||
-          error?.message ||
-          error?.error_description ||
-          'Não foi possível salvar o usuário.'
-      );
+      if (aba === 'ativos') buscarUsuarios();
+      toast.success('Usuário criado', `${fNome.trim()} foi adicionado ao sistema.`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao criar usuário', err?.message || 'Verifique o console.');
     } finally {
       setSaving(false);
     }
   }
 
-  async function alternarStatusUsuario(usuario) {
-    if (usuario.email === EMAIL_MASTER) {
-      toast.warning(
-        'Usuário protegido',
-        'O usuário master não pode ser alterado.'
-      );
-      return;
-    }
-
+  // ── Salvar edição ──────────────────────────────────────────
+  async function salvarEdicao(u) {
+    if (u.email === EMAIL_MASTER) { setEditId(null); return; }
+    if (!eNome.trim()) { toast.warning('Nome obrigatório', 'Informe o nome.'); return; }
+    setSaving(true);
     try {
       await _sb
         .from('usuarios', token)
-        .update({
-          ativo: !usuario.ativo,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', usuario.id);
+        .eq('id', u.id)
+        .update({ nome: eNome.trim(), perfil: ePerfil, updated_at: new Date().toISOString() });
 
-      toast.success(
-        usuario.ativo ? 'Usuário inativado' : 'Usuário reativado',
-        `${usuario.nome} foi ${
-          usuario.ativo ? 'inativado' : 'reativado'
-        } com sucesso.`
-      );
-
-      await buscarUsuarios();
-    } catch (error) {
-      console.error(error);
-      toast.error(
-        'Erro ao alterar status',
-        error?.message || 'Falha ao alterar usuário.'
-      );
+      setEditId(null);
+      buscarUsuarios();
+      toast.success('Usuário atualizado', 'Cadastro salvo com sucesso.');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar', err?.message || 'Verifique o console.');
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function resetarSenha(usuario) {
+  // ── Inativar / Reativar ────────────────────────────────────
+  async function alternarStatus(u) {
+    if (u.email === EMAIL_MASTER) { setConfirm(null); return; }
     try {
-      const response = await fetch(`${_sb.url}/auth/v1/recover`, {
-        method: 'POST',
-        headers: {
-          apikey: _sb.key,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: usuario.email,
-        }),
-      });
+      await _sb
+        .from('usuarios', token)
+        .eq('id', u.id)
+        .update({ ativo: !u.ativo, updated_at: new Date().toISOString() });
 
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw data || new Error('Erro ao solicitar reset.');
-      }
-
+      setConfirm(null);
+      buscarUsuarios();
       toast.success(
-        'Reset enviado',
-        `Foi enviado um e-mail de redefinição de senha para ${usuario.email}.`
+        u.ativo ? 'Usuário inativado' : 'Usuário reativado',
+        `${u.nome} foi ${u.ativo ? 'inativado' : 'reativado'} com sucesso.`
       );
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao alterar status', err?.message || '');
+    }
+  }
 
-      toast.error(
-        'Erro ao resetar senha',
-        error?.msg ||
-          error?.message ||
-          error?.error_description ||
-          'Não foi possível enviar o reset.'
-      );
+  // ── Reset de senha ─────────────────────────────────────────
+  async function resetarSenha(u) {
+    try {
+      await _sb.sendReset(u.email);
+      setResetOk(u.email);
+      setTimeout(() => setResetOk(null), 4000);
+      toast.success('Reset enviado', `E-mail de redefinição enviado para ${u.email}.`);
+    } catch (err) {
+      toast.error('Erro ao enviar reset', err?.message || '');
     }
   }
 
   async function copiarSenha() {
-    if (!senhaProvisoria) return;
-
-    await navigator.clipboard.writeText(senhaProvisoria);
-
-    toast.success('Senha copiada', 'A senha provisória foi copiada.');
+    if (!newCred?.senha) return;
+    await navigator.clipboard.writeText(newCred.senha);
+    toast.success('Copiado', 'Senha provisória copiada.');
   }
 
-  function labelPerfil(perfil) {
-    const item = perfis.find((p) => p.value === perfil);
-    return item?.label || perfil;
-  }
-
-  function badgePerfil(perfil) {
-    const styles = {
-      ADMIN: 'bg-violet-100 text-violet-700',
-      OPERADOR: 'bg-sky-100 text-sky-700',
-      VISUALIZADOR: 'bg-slate-100 text-slate-700',
-    };
-
-    return (
-      <span
-        className={`px-4 py-2 rounded-full text-sm font-semibold ${
-          styles[perfil] || 'bg-slate-100 text-slate-700'
-        }`}
-      >
-        {labelPerfil(perfil)}
-      </span>
-    );
-  }
-
-  function iniciais(nome) {
-    return String(nome || 'U')
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((p) => p[0])
-      .join('')
-      .toUpperCase();
-  }
+  const isAtivo = aba === 'ativos';
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Usuários"
-        subtitle="Gerencie usuários autorizados, perfis de acesso e status"
+        subtitle="Gerencie os usuários autorizados, perfis de acesso e status"
         actions={
-          <Button onClick={novoUsuario}>
-            <Plus size={18} />
-            Novo usuário
-          </Button>
+          isAtivo && (
+            <Button onClick={() => { setShowForm(!showForm); setNewCred(null); }}>
+              + Novo usuário
+            </Button>
+          )
         }
       />
 
-      <Card>
-        <div className="p-4 md:p-5">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-            <div className="md:col-span-5">
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                Buscar usuário
-              </label>
+      {/* ── Credenciais geradas ── */}
+      {newCred && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 space-y-3">
+          <div className="flex items-center gap-2 text-emerald-800 font-bold">
+            ✓ Usuário <strong>{newCred.nome}</strong> criado com sucesso!
+          </div>
+          <div className="bg-white border border-emerald-200 rounded-xl p-4 font-mono text-sm space-y-1">
+            <div><span className="text-slate-500">E-mail:&nbsp;&nbsp;&nbsp;</span><strong>{newCred.email}</strong></div>
+            <div>
+              <span className="text-slate-500">Senha prov.: </span>
+              <strong className="tracking-wider text-slate-900">{newCred.senha}</strong>
+            </div>
+          </div>
+          <p className="text-sm text-emerald-700">
+            ⚠ Compartilhe estas credenciais com segurança. O usuário deverá criar uma nova senha no primeiro acesso.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={copiarSenha}
+              className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition"
+            >
+              Copiar senha
+            </button>
+            <button
+              onClick={() => setNewCred(null)}
+              className="px-4 py-2 rounded-xl border border-emerald-300 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
 
-              <div className="relative">
-                <input
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Nome ou e-mail..."
-                  className="w-full rounded-xl border border-slate-300 px-4 py-2.5 pr-10"
-                />
+      {/* ── Formulário novo usuário ── */}
+      {showForm && (
+        <Card>
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-2 text-lg font-bold text-slate-900">
+              Novo usuário
+            </div>
 
-                <Search
-                  size={17}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                />
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-amber-800 text-sm">
+              Certifique-se de que a <strong>confirmação de e-mail está desativada</strong> no Supabase
+              (Authentication → Providers → Email) para o cadastro funcionar imediatamente.
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nome completo *</label>
+                <input style={iSx} value={fNome} onChange={e => setFNome(e.target.value)} placeholder="Nome do usuário"
+                  onFocus={e => e.target.style.borderColor = '#0F172A'} onBlur={e => e.target.style.borderColor = '#CBD5E1'} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">E-mail *</label>
+                <input style={iSx} type="email" value={fEmail} onChange={e => setFEmail(e.target.value)} placeholder="email@dominio.com"
+                  onFocus={e => e.target.style.borderColor = '#0F172A'} onBlur={e => e.target.style.borderColor = '#CBD5E1'} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Perfil de acesso</label>
+                <select style={iSx} value={fPerfil} onChange={e => setFPerfil(e.target.value)}
+                  onFocus={e => e.target.style.borderColor = '#0F172A'} onBlur={e => e.target.style.borderColor = '#CBD5E1'}>
+                  {PERFIS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
               </div>
             </div>
 
-            <div className="md:col-span-3">
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                Perfil
-              </label>
-
-              <select
-                value={filtroPerfil}
-                onChange={(e) => setFiltroPerfil(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-4 py-2.5"
-              >
-                <option value="todos">Todos</option>
-
-                {perfis.map((perfil) => (
-                  <option key={perfil.value} value={perfil.value}>
-                    {perfil.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="md:col-span-1">
-              <button
-                onClick={limparFiltros}
-                className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 flex items-center justify-center"
-              >
-                <Eraser size={16} />
-              </button>
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowForm(false)}>Cancelar</Button>
+              <Button onClick={criarUsuario} disabled={saving || !fNome || !fEmail}>
+                {saving ? 'Criando...' : 'Criar usuário'}
+              </Button>
             </div>
           </div>
+        </Card>
+      )}
+
+      {/* ── Filtros ── */}
+      <Card>
+        <div className="p-4 flex flex-wrap gap-3 items-center">
+          <input
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar por nome ou e-mail..."
+            className="flex-1 min-w-[200px] rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-slate-700"
+          />
+          <select
+            value={filtroPerfil}
+            onChange={e => setFiltroPerfil(e.target.value)}
+            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-slate-700"
+          >
+            <option value="todos">Todos os perfis</option>
+            {PERFIS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+          {(busca || filtroPerfil !== 'todos') && (
+            <button
+              onClick={() => { setBusca(''); setFiltroPerfil('todos'); }}
+              className="px-4 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-500 hover:bg-slate-50"
+            >
+              Limpar
+            </button>
+          )}
         </div>
       </Card>
 
+      {/* ── Abas Ativo / Inativo ── */}
       <div className="flex items-center justify-between">
         <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
-          <button
-            onClick={() => setAba('ativos')}
-            className={`px-5 py-2.5 rounded-xl font-semibold transition-all ${
-              aba === 'ativos'
-                ? 'bg-slate-900 text-white shadow'
-                : 'text-slate-500 hover:bg-slate-50'
-            }`}
-          >
-            Ativos
-          </button>
-
-          <button
-            onClick={() => setAba('inativos')}
-            className={`px-5 py-2.5 rounded-xl font-semibold transition-all ${
-              aba === 'inativos'
-                ? 'bg-slate-900 text-white shadow'
-                : 'text-slate-500 hover:bg-slate-50'
-            }`}
-          >
-            Inativos
-          </button>
+          {[{ k: 'ativos', l: 'Ativos' }, { k: 'inativos', l: 'Inativos' }].map(t => (
+            <button
+              key={t.k}
+              onClick={() => { setAba(t.k); setEditId(null); setBusca(''); setFiltroPerfil('todos'); }}
+              className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${aba === t.k ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              {t.l}
+            </button>
+          ))}
         </div>
-
         <div className="text-sm text-slate-500">
-          Total: {usuariosFiltrados.length} usuário(s)
+          {usuariosFiltrados.length} usuário{usuariosFiltrados.length !== 1 ? 's' : ''}
         </div>
       </div>
 
+      {/* ── Lista de usuários ── */}
       <Card>
         <div className="overflow-hidden">
-          <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 text-center text-sm font-bold uppercase tracking-wide text-slate-400">
-            {usuariosFiltrados.length}{' '}
-            {aba === 'ativos' ? 'usuário ativo' : 'usuário inativo'}
+          <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 text-xs font-bold uppercase tracking-wide text-slate-400">
+            {usuariosFiltrados.length} usuário{usuariosFiltrados.length !== 1 ? 's' : ''} {isAtivo ? 'ativo' : 'inativo'}{usuariosFiltrados.length !== 1 ? 's' : ''}
           </div>
 
-          <div className="divide-y divide-slate-100">
-            {usuariosFiltrados.map((usuario) => (
-              <div
-                key={usuario.id}
-                className="p-5 flex flex-col xl:flex-row xl:items-center gap-5"
-              >
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="h-12 w-12 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold shrink-0">
-                    {iniciais(usuario.nome)}
+          {loading ? (
+            <div className="p-10 text-center text-slate-400">Carregando...</div>
+          ) : usuariosFiltrados.length === 0 ? (
+            <div className="p-10 text-center text-slate-400">
+              <div className="text-4xl mb-3 opacity-30">👥</div>
+              <div className="font-semibold">Nenhum usuário {isAtivo ? 'ativo' : 'inativo'} encontrado</div>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {usuariosFiltrados.map((u, i) => (
+                <div key={u.id}>
+                  {/* ── Linha do usuário ── */}
+                  <div className={`p-5 ${editId === u.id ? 'bg-slate-50' : 'bg-white'}`}>
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+
+                      {/* Avatar + info */}
+                      <div className="flex items-center gap-4">
+                        <div className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${isAtivo ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                          {ini(u.nome)}
+                        </div>
+                        <div>
+                          <div className={`font-bold ${isAtivo ? 'text-slate-900' : 'text-slate-400'}`}>{u.nome}</div>
+                          <div className="text-sm text-slate-500 flex items-center gap-3 flex-wrap mt-0.5">
+                            <span>{u.email}</span>
+                            <StatusDot ativo={isAtivo} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Perfil + ações */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <BadgePerfil perfil={u.perfil} />
+
+                        {isAtivo && (
+                          <>
+                            <button
+                              onClick={() => editId === u.id ? setEditId(null) : (setEditId(u.id), setENome(u.nome), setEPerfil(u.perfil))}
+                              className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 flex items-center gap-1.5"
+                            >
+                              {editId === u.id ? '✕ Cancelar' : '✏ Editar'}
+                            </button>
+                            <button
+                              onClick={() => resetarSenha(u)}
+                              disabled={resetOk === u.email}
+                              className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 disabled:opacity-60"
+                            >
+                              {resetOk === u.email ? '✓ Enviado' : '🔑 Reset senha'}
+                            </button>
+                            {u.email !== EMAIL_MASTER && (
+                              <button
+                                onClick={() => setConfirm(u)}
+                                className="px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-xs font-semibold text-rose-700 hover:bg-rose-100 flex items-center gap-1.5"
+                              >
+                                🚫 Inativar
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {!isAtivo && u.email !== EMAIL_MASTER && (
+                          <button
+                            onClick={() => setConfirm(u)}
+                            className="px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 flex items-center gap-1.5"
+                          >
+                            ✓ Reativar
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="min-w-0">
-                    <div className="font-bold text-slate-900 truncate">
-                      {usuario.nome}
+                  {/* ── Edição inline ── */}
+                  {editId === u.id && (
+                    <div className="px-5 pb-5 pt-3 bg-slate-50 border-t border-dashed border-slate-200">
+                      <div className="text-sm font-bold text-slate-700 mb-3">✏ Editar usuário</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Nome completo *</label>
+                          <input style={iSx} value={eNome} onChange={e => setENome(e.target.value)}
+                            onFocus={e => e.target.style.borderColor = '#0F172A'} onBlur={e => e.target.style.borderColor = '#CBD5E1'} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Perfil de acesso</label>
+                          <select style={iSx} value={ePerfil} onChange={e => setEPerfil(e.target.value)}
+                            onFocus={e => e.target.style.borderColor = '#0F172A'} onBlur={e => e.target.style.borderColor = '#CBD5E1'}>
+                            {PERFIS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 mt-3">
+                        <Button variant="secondary" onClick={() => setEditId(null)}>Cancelar</Button>
+                        <Button onClick={() => salvarEdicao(u)} disabled={saving || !eNome.trim()}>
+                          {saving ? 'Salvando...' : 'Salvar alterações'}
+                        </Button>
+                      </div>
                     </div>
-
-                    <div className="text-slate-500 truncate">
-                      {usuario.email}
-                      <span
-                        className={`ml-3 font-semibold ${
-                          usuario.ativo ? 'text-emerald-700' : 'text-rose-700'
-                        }`}
-                      >
-                        • {usuario.ativo ? 'Ativo' : 'Inativo'}
-                      </span>
-                    </div>
-                  </div>
+                  )}
                 </div>
-
-                <div className="flex items-center gap-3 flex-wrap xl:justify-end">
-                  {badgePerfil(usuario.perfil)}
-
-                  <button
-                    onClick={() => editarUsuario(usuario)}
-                    className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50 flex items-center gap-2"
-                  >
-                    <Pencil size={15} />
-                    Editar
-                  </button>
-
-                  <button
-                    onClick={() => resetarSenha(usuario)}
-                    className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50 flex items-center gap-2"
-                  >
-                    <KeyRound size={15} />
-                    Reset senha
-                  </button>
-
-                  <button
-                    onClick={() => alternarStatusUsuario(usuario)}
-                    className={`px-4 py-2 rounded-xl border text-sm font-semibold flex items-center gap-2 ${
-                      usuario.ativo
-                        ? 'border-rose-200 text-rose-700 hover:bg-rose-50'
-                        : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                    }`}
-                  >
-                    {usuario.ativo ? (
-                      <>
-                        <UserX size={15} />
-                        Inativar
-                      </>
-                    ) : (
-                      <>
-                        <UserCheck size={15} />
-                        Reativar
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            {usuariosFiltrados.length === 0 && (
-              <div className="p-10 text-center text-slate-500">
-                Nenhum usuário encontrado.
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </Card>
 
-      {modalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl">
-            <div className="p-6 border-b border-slate-200">
-              <h2 className="text-2xl font-bold text-slate-900">
-                {form.id ? 'Editar Usuário' : 'Novo Usuário'}
-              </h2>
-
-              <p className="text-slate-500 mt-1">
-                O novo usuário será criado no Supabase Auth e vinculado a este
-                sistema.
-              </p>
+      {/* ── Modal de confirmação inativar/reativar ── */}
+      {confirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7">
+            <div className="text-center mb-6">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl ${isAtivo ? 'bg-rose-50' : 'bg-emerald-50'}`}>
+                {isAtivo ? '🚫' : '✓'}
+              </div>
+              <div className="text-lg font-extrabold text-slate-900 mb-2">
+                {isAtivo ? 'Inativar usuário?' : 'Reativar usuário?'}
+              </div>
+              <div className="text-sm text-slate-500 leading-relaxed">
+                {isAtivo
+                  ? <><strong>{confirm.nome}</strong> perderá acesso ao sistema. O histórico será mantido e o usuário poderá ser reativado a qualquer momento.</>
+                  : <><strong>{confirm.nome}</strong> voltará a ter acesso ao sistema.</>
+                }
+              </div>
             </div>
-
-            <div className="p-6 grid grid-cols-1 gap-4">
-              {senhaProvisoria && (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                  <div className="font-semibold text-emerald-800">
-                    Usuário criado com sucesso
-                  </div>
-
-                  <div className="text-sm text-emerald-700 mt-1">
-                    Envie esta senha provisória ao usuário:
-                  </div>
-
-                  <div className="mt-3 flex items-center gap-3">
-                    <code className="bg-white border border-emerald-200 rounded-xl px-4 py-3 font-bold text-slate-900 flex-1">
-                      {senhaProvisoria}
-                    </code>
-
-                    <button
-                      type="button"
-                      onClick={copiarSenha}
-                      className="rounded-xl bg-emerald-600 text-white px-4 py-3 font-semibold flex items-center gap-2"
-                    >
-                      <Copy size={16} />
-                      Copiar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Nome
-                </label>
-
-                <input
-                  value={form.nome}
-                  disabled={!!senhaProvisoria}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      nome: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 disabled:bg-slate-100"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  E-mail
-                </label>
-
-                <input
-                  value={form.email}
-                  disabled={!!form.id || !!senhaProvisoria}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      email: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 disabled:bg-slate-100"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Perfil
-                </label>
-
-                <select
-                  value={form.perfil}
-                  disabled={!!senhaProvisoria}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      perfil: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 disabled:bg-slate-100"
-                >
-                  {perfis.map((perfil) => (
-                    <option key={perfil.value} value={perfil.value}>
-                      {perfil.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {form.id && (
-                <div
-                  className={`rounded-2xl border p-4 flex items-center justify-between ${
-                    form.ativo
-                      ? 'border-emerald-200 bg-emerald-50'
-                      : 'border-rose-200 bg-rose-50'
-                  }`}
-                >
-                  <div>
-                    <div className="font-semibold text-slate-800">
-                      Status do usuário
-                    </div>
-
-                    <div className="text-sm text-slate-500">
-                      Usuários inativos não acessam o sistema.
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        ativo: !form.ativo,
-                      })
-                    }
-                    className={`relative w-16 h-9 rounded-full transition-all duration-300 ${
-                      form.ativo ? 'bg-emerald-500' : 'bg-slate-300'
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-1 h-7 w-7 rounded-full bg-white shadow-md transition-all duration-300 ${
-                        form.ativo ? 'left-8' : 'left-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={() => setConfirm(null)}>Cancelar</Button>
               <Button
-                variant="secondary"
-                onClick={() => {
-                  setModalOpen(false);
-                  setForm(formInicial);
-                  setSenhaProvisoria('');
-                }}
+                onClick={() => alternarStatus(confirm)}
+                variant={isAtivo ? 'danger' : 'primary'}
               >
-                Fechar
+                {isAtivo ? 'Sim, inativar' : 'Sim, reativar'}
               </Button>
-
-              {!senhaProvisoria && (
-                <Button onClick={salvarUsuario}>
-                  {saving ? 'Salvando...' : 'Salvar usuário'}
-                </Button>
-              )}
             </div>
           </div>
         </div>

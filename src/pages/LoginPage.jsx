@@ -1,10 +1,10 @@
+import { TENANT_ID } from '../config';
 import { useEffect, useState } from 'react';
 import { LogIn } from 'lucide-react';
 
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
-const TENANT_ID = '7190dac7-342c-408f-81df-890c194ccfad';
 
 const defaultTheme = {
   nomeSistema: 'Gestão de Processos',

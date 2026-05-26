@@ -1,63 +1,136 @@
 import { useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
-
+import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard,
-  ClipboardPlus,
-  BarChart3,
-  ChevronDown,
-  FolderKanban,
-  LogOut,
+  LayoutDashboard, ClipboardPlus, BarChart3,
+  ChevronDown, FolderKanban, LogOut, KeyRound, CalendarDays,
 } from 'lucide-react';
 
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { TENANT_ID } from '../config';
 
-const TENANT_ID = '7190dac7-342c-408f-81df-890c194ccfad';
+const THEME_CACHE_KEY = `gestaoescala-theme-${TENANT_ID}`;
 
 const defaultTheme = {
   nomeSistema: 'Escala Médica',
   logo: 'https://placehold.co/180x70/ffffff/0f172a?text=LOGO',
-  cores: {
-    fundo: '#F1F5F9',
-    sidebar: '#0F172A',
-    secundaria: '#D4A62A',
-    textoClaro: '#CBD5E1',
-  },
+  cores: { fundo: '#F1F5F9', sidebar: '#0F172A', secundaria: '#D4A62A', textoClaro: '#CBD5E1' },
 };
 
-export default function MainLayout({ children }) {
-  const { usuario, perfil, logout } = useAuth();
+// Lê cache do localStorage imediatamente — sem delay visual
+function lerThemeCache() {
+  try {
+    const raw = localStorage.getItem(THEME_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
 
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [cadastrosOpen, setCadastrosOpen] = useState(true);
-  const [plantoesOpen, setPlantoesOpen] = useState(true);
-  const [theme, setTheme] = useState(defaultTheme);
+function salvarThemeCache(theme) {
+  try { localStorage.setItem(THEME_CACHE_KEY, JSON.stringify(theme)); } catch {}
+}
+
+function montarTheme(d) {
+  return {
+    nomeSistema: d.nome_sistema  || defaultTheme.nomeSistema,
+    logo:        d.logo_url      || defaultTheme.logo,
+    cores: {
+      fundo:      d.cor_fundo      || defaultTheme.cores.fundo,
+      sidebar:    d.cor_primaria   || defaultTheme.cores.sidebar,
+      secundaria: d.cor_secundaria || defaultTheme.cores.secundaria,
+      textoClaro: '#CBD5E1',
+    },
+  };
+}
+
+const MENUS = {
+  MASTER: [
+    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    {
+      id: 'plantoes', icon: ClipboardPlus, label: 'Plantões',
+      children: [
+        { path: '/plantoes',        label: 'Gerar Plantões'     },
+        { path: '/gestao-plantoes', label: 'Gestão de Plantões' },
+        { path: '/calendario',      label: 'Calendário'          },
+      ],
+    },
+    {
+      id: 'cadastros', icon: FolderKanban, label: 'Cadastros',
+      children: [
+        { path: '/usuarios',      label: 'Usuários'      },
+        { path: '/prestadores',   label: 'Prestadores'   },
+        { path: '/escalas',       label: 'Escalas'       },
+        { path: '/turnos',        label: 'Turnos'        },
+        { path: '/remuneracao',   label: 'Remuneração'   },
+        { path: '/configuracoes', label: 'Configurações' },
+      ],
+    },
+    { path: '/relatorios', icon: BarChart3, label: 'Relatórios' },
+  ],
+
+  ADMIN: [
+    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    {
+      id: 'plantoes', icon: ClipboardPlus, label: 'Plantões',
+      children: [
+        { path: '/plantoes',        label: 'Gerar Plantões'     },
+        { path: '/gestao-plantoes', label: 'Gestão de Plantões' },
+        { path: '/calendario',      label: 'Calendário'          },
+      ],
+    },
+    {
+      id: 'cadastros', icon: FolderKanban, label: 'Cadastros',
+      children: [
+        { path: '/prestadores', label: 'Prestadores' },
+        { path: '/escalas',     label: 'Escalas'     },
+        { path: '/turnos',      label: 'Turnos'      },
+        { path: '/remuneracao', label: 'Remuneração' },
+      ],
+    },
+    { path: '/relatorios', icon: BarChart3, label: 'Relatórios' },
+  ],
+
+  OPERADOR: [
+    {
+      id: 'plantoes', icon: ClipboardPlus, label: 'Plantões',
+      children: [
+        { path: '/gestao-plantoes', label: 'Gestão de Plantões' },
+        { path: '/calendario',      label: 'Calendário'          },
+      ],
+    },
+  ],
+
+  VISUALIZADOR: [
+    { path: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard'  },
+    { path: '/calendario', icon: CalendarDays,     label: 'Calendário' },
+  ],
+};
+
+export default function MainLayout({ children, onChangePass }) {
+  const { usuario, perfil, logout } = useAuth();
+  const location = useLocation();
+
+  const [menuOpen,   setMenuOpen]   = useState(false);
+  const [openGroups, setOpenGroups] = useState({ plantoes: true, cadastros: false });
+
+  // ── Tema: carrega do cache imediatamente, depois atualiza do Supabase ──
+  const [theme, setTheme] = useState(() => lerThemeCache() || defaultTheme);
+
+  const tabs = MENUS[perfil] || [];
 
   useEffect(() => {
     carregarTema();
-
-    function atualizarTema(event) {
-      const dados = event.detail;
-
-      setTheme({
-        nomeSistema: dados.nome_sistema || defaultTheme.nomeSistema,
-        logo: dados.logo_url || defaultTheme.logo,
-        cores: {
-          fundo: dados.cor_fundo || defaultTheme.cores.fundo,
-          sidebar: dados.cor_primaria || defaultTheme.cores.sidebar,
-          secundaria: dados.cor_secundaria || defaultTheme.cores.secundaria,
-          textoClaro: '#CBD5E1',
-        },
-      });
-    }
-
-    window.addEventListener('tenant-theme-updated', atualizarTema);
-
-    return () => {
-      window.removeEventListener('tenant-theme-updated', atualizarTema);
-    };
+    const fn = e => aplicarTheme(montarTheme(e.detail));
+    window.addEventListener('tenant-theme-updated', fn);
+    return () => window.removeEventListener('tenant-theme-updated', fn);
   }, []);
+
+  useEffect(() => {
+    const p = location.pathname;
+    if (['/usuarios','/prestadores','/escalas','/turnos','/remuneracao','/configuracoes'].includes(p))
+      setOpenGroups(g => ({ ...g, cadastros: true }));
+    if (['/plantoes','/gestao-plantoes','/calendario'].includes(p))
+      setOpenGroups(g => ({ ...g, plantoes: true }));
+  }, [location.pathname]);
 
   async function carregarTema() {
     const { data, error } = await supabase
@@ -65,320 +138,144 @@ export default function MainLayout({ children }) {
       .select('nome_sistema, logo_url, cor_primaria, cor_secundaria, cor_fundo')
       .eq('id', TENANT_ID)
       .single();
-
-    if (error) {
-      console.error('Erro ao carregar tema:', error);
-      return;
-    }
-
-    setTheme({
-      nomeSistema: data.nome_sistema || defaultTheme.nomeSistema,
-      logo: data.logo_url || defaultTheme.logo,
-      cores: {
-        fundo: data.cor_fundo || defaultTheme.cores.fundo,
-        sidebar: data.cor_primaria || defaultTheme.cores.sidebar,
-        secundaria: data.cor_secundaria || defaultTheme.cores.secundaria,
-        textoClaro: '#CBD5E1',
-      },
-    });
+    if (error || !data) return;
+    aplicarTheme(montarTheme(data));
   }
 
-  async function sairSistema() {
-    await logout();
-    localStorage.clear();
-    sessionStorage.clear();
-    window.location.reload();
+  function aplicarTheme(t) {
+    setTheme(t);
+    salvarThemeCache(t); // persiste para próxima abertura
   }
 
-  function GroupButton({ icon: Icon, label, open, onClick }) {
+  function toggleGroup(id) {
+    setOpenGroups(g => ({ ...g, [id]: !g[id] }));
+  }
+
+  function NavItemGroup({ item }) {
+    const isOpen      = openGroups[item.id];
+    const childActive = item.children?.some(c => location.pathname === c.path);
+    const Icon = item.icon;
     return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-[15px] font-semibold transition-all hover:bg-white/10"
-        style={{ color: '#FFFFFF' }}
-      >
-        <div className="flex items-center gap-3">
-          <Icon size={19} />
-          <span>{label}</span>
+      <div>
+        <button
+          type="button"
+          onClick={() => toggleGroup(item.id)}
+          className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:bg-white/10"
+          style={{
+            color:           childActive ? '#FFFFFF' : theme.cores.textoClaro,
+            borderLeft:      childActive ? `3px solid ${theme.cores.secundaria}` : '3px solid transparent',
+            backgroundColor: childActive ? 'rgba(255,255,255,0.08)' : 'transparent',
+          }}
+        >
+          <div className="flex items-center gap-3"><Icon size={16} /><span>{item.label}</span></div>
+          <ChevronDown size={13} className={`opacity-50 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {isOpen && (
+          <div className="ml-4 pl-3 border-l border-white/10 space-y-0.5 mt-0.5">
+            {item.children.map(child => (
+              <NavLink key={child.path} to={child.path} onClick={() => setMenuOpen(false)}
+                className="w-full flex items-center pl-4 pr-3 py-2 rounded-xl text-sm font-medium transition-all"
+                style={({ isActive }) => ({
+                  backgroundColor: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  color:           isActive ? '#FFFFFF' : theme.cores.textoClaro,
+                  borderLeft:      isActive ? `3px solid ${theme.cores.secundaria}` : '3px solid transparent',
+                })}>
+                {child.label}
+              </NavLink>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function NavItemSimple({ item }) {
+    const Icon = item.icon;
+    return (
+      <NavLink to={item.path} onClick={() => setMenuOpen(false)}
+        className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+        style={({ isActive }) => ({
+          backgroundColor: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
+          color:           isActive ? '#FFFFFF' : theme.cores.textoClaro,
+          borderLeft:      isActive ? `3px solid ${theme.cores.secundaria}` : '3px solid transparent',
+        })}>
+        <Icon size={16} /><span>{item.label}</span>
+      </NavLink>
+    );
+  }
+
+  function Sidebar() {
+    return (
+      <div className="flex flex-col h-full" style={{ backgroundColor: theme.cores.sidebar }}>
+        <div className="bg-white shrink-0">
+          <div className="p-4 flex justify-center">
+            <img src={theme.logo} alt="Logo" className="max-w-[140px] max-h-[56px] object-contain" />
+          </div>
+          <div style={{ height: 3, backgroundColor: theme.cores.secundaria }} />
         </div>
 
-        <ChevronDown
-          size={17}
-          className={`transition-transform ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-    );
-  }
+        <nav className="flex-1 p-2.5 space-y-0.5 overflow-y-auto soft-scrollbar">
+          <style>{`.soft-scrollbar::-webkit-scrollbar{width:4px}.soft-scrollbar::-webkit-scrollbar-thumb{background:rgba(148,163,184,.3);border-radius:99px}`}</style>
+          {tabs.map(item =>
+            item.children
+              ? <NavItemGroup key={item.id} item={item} />
+              : <NavItemSimple key={item.path} item={item} />
+          )}
+        </nav>
 
-  function MainLink({ to, icon: Icon, label, onClick }) {
-    return (
-      <NavLink
-        to={to}
-        onClick={onClick}
-        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium transition-all"
-        style={({ isActive }) => ({
-          backgroundColor: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
-          color: isActive ? '#FFFFFF' : theme.cores.textoClaro,
-          borderLeft: isActive
-            ? `3px solid ${theme.cores.secundaria}`
-            : '3px solid transparent',
-        })}
-      >
-        <Icon size={19} />
-        <span>{label}</span>
-      </NavLink>
-    );
-  }
+        <div style={{ height: 3, backgroundColor: theme.cores.secundaria }} />
 
-  function SubLink({ to, label, onClick }) {
-    return (
-      <NavLink
-        to={to}
-        onClick={onClick}
-        className="w-full flex items-center pl-5 pr-3 py-2.5 rounded-xl text-[14px] font-medium transition-all"
-        style={({ isActive }) => ({
-          backgroundColor: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
-          color: isActive ? '#FFFFFF' : theme.cores.textoClaro,
-          borderLeft: isActive
-            ? `3px solid ${theme.cores.secundaria}`
-            : '3px solid transparent',
-        })}
-      >
-        <span className="ml-4">{label}</span>
-      </NavLink>
+        <div className="p-3 shrink-0">
+          <div className="rounded-2xl bg-white/10 p-3 space-y-2">
+            <div>
+              <div className="text-sm font-semibold text-white truncate">{usuario?.nome || 'Usuário'}</div>
+              <div className="text-xs truncate" style={{ color: theme.cores.textoClaro }}>{perfil || '—'}</div>
+            </div>
+            {onChangePass && (
+              <button type="button" onClick={onChangePass}
+                className="w-full rounded-xl px-3 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition"
+                style={{ background: 'rgba(255,255,255,0.10)', color: theme.cores.textoClaro, border: '1px solid rgba(255,255,255,0.15)' }}>
+                <KeyRound size={12} /> Alterar senha
+              </button>
+            )}
+            <button type="button" onClick={logout}
+              className="w-full rounded-xl bg-rose-500 hover:bg-rose-600 px-3 py-2 text-xs font-semibold text-white flex items-center justify-center gap-2 transition">
+              <LogOut size={12} /> Sair
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <div
-      className="h-screen overflow-hidden"
-      style={{ backgroundColor: theme.cores.fundo }}
-    >
-      <style>
-        {`
-          .soft-scrollbar::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-          }
+    <div className="h-screen overflow-hidden flex" style={{ backgroundColor: theme.cores.fundo }}>
+      <aside className="hidden md:flex flex-col h-screen shrink-0" style={{ width: 210 }}>
+        <Sidebar />
+      </aside>
 
-          .soft-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-          }
+      <div className="flex-1 min-w-0 flex flex-col h-screen">
+        <header className="md:hidden bg-white shadow-sm px-4 py-3 flex items-center justify-between shrink-0">
+          <strong className="text-sm text-slate-800">{theme.nomeSistema}</strong>
+          <button onClick={() => setMenuOpen(!menuOpen)}
+            className="text-white px-3 py-1.5 rounded-lg text-sm font-semibold"
+            style={{ backgroundColor: theme.cores.sidebar }}>
+            Menu
+          </button>
+        </header>
 
-          .soft-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(148, 163, 184, 0.35);
-            border-radius: 999px;
-          }
-
-          .soft-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgba(148, 163, 184, 0.55);
-          }
-
-          .soft-scrollbar {
-            scrollbar-width: thin;
-            scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
-          }
-        `}
-      </style>
-
-      <div className="flex h-screen">
-        <aside
-          className="hidden md:flex text-white flex-col h-screen shrink-0"
-          style={{
-            width: '220px',
-            minWidth: '220px',
-            maxWidth: '220px',
-            backgroundColor: theme.cores.sidebar,
-          }}
-        >
-          <div className="bg-white shrink-0">
-            <div className="p-6 flex justify-center">
-              <img
-                src={theme.logo}
-                alt="Logo"
-                className="max-w-[150px] max-h-[70px] object-contain"
-              />
+        {menuOpen && (
+          <>
+            <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setMenuOpen(false)} />
+            <div className="md:hidden fixed left-0 top-0 bottom-0 z-50 flex flex-col" style={{ width: 230 }}>
+              <Sidebar />
             </div>
+          </>
+        )}
 
-            <div
-              style={{
-                height: '3px',
-                backgroundColor: theme.cores.secundaria,
-              }}
-            />
-          </div>
-
-          <nav className="flex-1 p-3 space-y-1 overflow-y-auto soft-scrollbar">
-            <MainLink
-              to="/dashboard"
-              icon={LayoutDashboard}
-              label="Dashboard"
-            />
-
-            <GroupButton
-              icon={FolderKanban}
-              label="Cadastros"
-              open={cadastrosOpen}
-              onClick={() => setCadastrosOpen(!cadastrosOpen)}
-            />
-
-            {cadastrosOpen && (
-              <div className="ml-3 pl-3 border-l border-white/10 space-y-1">
-                <SubLink to="/usuarios" label="Usuários" />
-                <SubLink to="/prestadores" label="Prestadores" />
-                <SubLink to="/escalas" label="Escalas" />
-                <SubLink to="/turnos" label="Turnos" />
-                <SubLink to="/remuneracao" label="Remuneração" />
-                <SubLink to="/configuracoes" label="Configurações" />
-              </div>
-            )}
-
-            <GroupButton
-              icon={ClipboardPlus}
-              label="Plantões"
-              open={plantoesOpen}
-              onClick={() => setPlantoesOpen(!plantoesOpen)}
-            />
-
-            {plantoesOpen && (
-              <div className="ml-3 pl-3 border-l border-white/10 space-y-1">
-                <SubLink to="/plantoes" label="Gerar Plantões" />
-                <SubLink to="/gestao-plantoes" label="Gestão de Plantões" />
-                <SubLink to="/calendario" label="Calendário" />
-              </div>
-            )}
-
-            <MainLink to="/relatorios" icon={BarChart3} label="Relatórios" />
-          </nav>
-
-          <div
-            className="shrink-0"
-            style={{
-              height: '3px',
-              backgroundColor: theme.cores.secundaria,
-            }}
-          />
-
-          <div className="p-4 shrink-0">
-            <div className="rounded-2xl bg-white/10 p-4 space-y-3">
-              <div>
-                <div className="text-sm font-semibold truncate">
-                  {usuario?.nome || 'Usuário'}
-                </div>
-                <div
-                  className="text-xs"
-                  style={{ color: theme.cores.textoClaro }}
-                >
-                  {perfil || 'Perfil'}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={sairSistema}
-                className="w-full rounded-xl bg-rose-500 hover:bg-rose-600 px-3 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition"
-              >
-                <LogOut size={16} />
-                Sair
-              </button>
-            </div>
-          </div>
-        </aside>
-
-        <div className="flex-1 min-w-0 flex flex-col h-screen">
-          <header className="md:hidden bg-white shadow-sm px-4 py-3 flex items-center justify-between shrink-0">
-            <strong>{theme.nomeSistema}</strong>
-
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="text-white px-4 py-2 rounded-lg"
-              style={{ backgroundColor: theme.cores.sidebar }}
-            >
-              Menu
-            </button>
-          </header>
-
-          {menuOpen && (
-            <div
-              className="md:hidden text-white p-4 space-y-1 shrink-0"
-              style={{ backgroundColor: theme.cores.sidebar }}
-            >
-              <MainLink
-                to="/dashboard"
-                icon={LayoutDashboard}
-                label="Dashboard"
-                onClick={() => setMenuOpen(false)}
-              />
-
-              <SubLink
-                to="/usuarios"
-                label="Usuários"
-                onClick={() => setMenuOpen(false)}
-              />
-              <SubLink
-                to="/prestadores"
-                label="Prestadores"
-                onClick={() => setMenuOpen(false)}
-              />
-              <SubLink
-                to="/escalas"
-                label="Escalas"
-                onClick={() => setMenuOpen(false)}
-              />
-              <SubLink
-                to="/turnos"
-                label="Turnos"
-                onClick={() => setMenuOpen(false)}
-              />
-              <SubLink
-                to="/remuneracao"
-                label="Remuneração"
-                onClick={() => setMenuOpen(false)}
-              />
-              <SubLink
-                to="/configuracoes"
-                label="Configurações"
-                onClick={() => setMenuOpen(false)}
-              />
-              <SubLink
-                to="/plantoes"
-                label="Gerar Plantões"
-                onClick={() => setMenuOpen(false)}
-              />
-              <SubLink
-                to="/gestao-plantoes"
-                label="Gestão de Plantões"
-                onClick={() => setMenuOpen(false)}
-              />
-              <SubLink
-                to="/calendario"
-                label="Calendário"
-                onClick={() => setMenuOpen(false)}
-              />
-
-              <MainLink
-                to="/relatorios"
-                icon={BarChart3}
-                label="Relatórios"
-                onClick={() => setMenuOpen(false)}
-              />
-
-              <button
-                type="button"
-                onClick={sairSistema}
-                className="w-full rounded-xl bg-rose-500 hover:bg-rose-600 px-3 py-3 text-sm font-semibold flex items-center justify-center gap-2 transition mt-3"
-              >
-                <LogOut size={16} />
-                Sair
-              </button>
-            </div>
-          )}
-
-          <main className="flex-1 p-4 md:p-8 overflow-y-auto overflow-x-auto soft-scrollbar">
-            {children}
-          </main>
-        </div>
+        <main className="flex-1 p-4 md:p-6 overflow-y-auto soft-scrollbar">
+          {children}
+        </main>
       </div>
     </div>
   );

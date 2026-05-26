@@ -1,3 +1,4 @@
+import { TENANT_ID } from '../config';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Search, Plus, Pencil, Filter, Eraser } from 'lucide-react';
@@ -8,7 +9,6 @@ import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import PageHeader from '../components/ui/PageHeader.jsx';
 
-const TENANT_ID = '7190dac7-342c-408f-81df-890c194ccfad';
 
 const formInicial = {
   id: null,

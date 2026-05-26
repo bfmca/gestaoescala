@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Base: reduz fonte padrão de 16px → 13px ─────────────────
+   Todos os valores em rem escalam proporcionalmente.
+   Tailwind text-sm = 0.875rem → ~11.4px
+   Tailwind text-base = 1rem   → ~13px
+   Tailwind text-lg = 1.125rem → ~14.6px                      */
+html {
+  font-size: 13px;
+}
+
 html,
 body,
 #root {
@@ -15,3 +24,9 @@ body,
 body {
   background: #f1f5f9;
 }
+
+/* ── Scrollbar suave global ──────────────────────────────────── */
+::-webkit-scrollbar         { width: 5px; height: 5px; }
+::-webkit-scrollbar-track   { background: transparent; }
+::-webkit-scrollbar-thumb   { background: rgba(148,163,184,.35); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.5); }

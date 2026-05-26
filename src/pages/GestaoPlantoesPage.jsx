@@ -10,15 +10,16 @@ import {
 } from 'lucide-react';
 
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext.jsx';
 
 import Button from '../components/ui/Button.jsx';
 import Card from '../components/ui/Card.jsx';
 import PageHeader from '../components/ui/PageHeader.jsx';
 import { useToast } from '../components/ui/ToastProvider.jsx';
 
-const TENANT_ID = '7190dac7-342c-408f-81df-890c194ccfad';
+import { TENANT_ID } from '../config';
 
-const PERFIL_USUARIO_DEV = 'financeiro';
+
 
 const statusOptions = [
   { value: 'ABERTO', label: 'Aberto' },
@@ -40,6 +41,7 @@ const formInicial = {
 };
 
 export default function GestaoPlantoesPage() {
+  const { podeConferir } = useAuth();
   const toast = useToast();
 
   const [plantoes, setPlantoes] = useState([]);
@@ -61,8 +63,6 @@ export default function GestaoPlantoesPage() {
     useState(null);
   const [buscaPrestadorLinha, setBuscaPrestadorLinha] = useState('');
 
-  const podeAprovarFinanceiro =
-    PERFIL_USUARIO_DEV === 'admin' || PERFIL_USUARIO_DEV === 'financeiro';
 
   useEffect(() => {
     carregarDados();
@@ -280,7 +280,7 @@ export default function GestaoPlantoesPage() {
   }
 
   async function acaoRapidaPlantao(plantao) {
-    if (!podeAprovarFinanceiro) {
+    if (!podeConferir) {
       toast.warning(
         'Acesso restrito',
         'Somente admin ou financeiro podem executar esta ação.'
@@ -365,7 +365,7 @@ export default function GestaoPlantoesPage() {
   }
 
   function renderToggleConferido(plantao) {
-    if (!podeAprovarFinanceiro) return null;
+    if (!podeConferir) return null;
 
     if (
       plantao.status === 'ABERTO' ||

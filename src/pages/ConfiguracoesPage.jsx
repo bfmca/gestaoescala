@@ -1,3 +1,4 @@
+import { TENANT_ID } from '../config';
 import { useEffect, useState } from 'react';
 
 import { supabase } from '../lib/supabase';
@@ -7,7 +8,6 @@ import Card from '../components/ui/Card.jsx';
 import PageHeader from '../components/ui/PageHeader.jsx';
 import ThemePreviewCard from '../components/ui/ThemePreviewCard.jsx';
 
-const TENANT_ID = '7190dac7-342c-408f-81df-890c194ccfad';
 
 function ColorField({ label, value, onChange }) {
   return (
