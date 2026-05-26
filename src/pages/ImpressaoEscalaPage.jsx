@@ -225,8 +225,8 @@ export default function ImpressaoEscalaPage() {
           display:'flex', justifyContent:'space-between', fontSize:10, color:'#888' }}>
           <span>Gerado em {new Date().toLocaleDateString('pt-BR')}</span>
           <div style={{textAlign:'center'}}>
-            <div style={{marginBottom:40}}>________________________________________</div>
-            <div style={{fontSize:10, color:'#555'}}>Responsável pela escala</div>
+            <div style={{fontSize:10, color:'#555', marginBottom:4}}>Responsável pela escala</div>
+            <div style={{borderTop:'1px solid #555', width:240, margin:'0 auto'}}></div>
           </div>
         </div>
       </div>
