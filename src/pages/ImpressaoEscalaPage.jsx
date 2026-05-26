@@ -1,224 +1,234 @@
-// ── Impressão de escala mensal — modelo PDF do hospital ────────
-// Acessado via botão no CalendarioPage, abre em nova aba e imprime
-
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { TENANT_ID } from '../config';
 
-const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-               'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const DIAS_SEMANA = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const AuthContext = createContext(null);
 
-export default function ImpressaoEscalaPage() {
-  // Lê parâmetros da URL: ?ano=2026&mes=4&escala_id=xxx&escala_nome=Pronto+Socorro
-  const params  = new URLSearchParams(window.location.search);
-  const ano     = parseInt(params.get('ano')  || new Date().getFullYear());
-  const mes     = parseInt(params.get('mes')  || new Date().getMonth());
-  const escId   = params.get('escala_id')   || '';
-  const escNome = params.get('escala_nome') || 'Escala';
+const SB_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, '');
+const SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SCHEMA  = import.meta.env.VITE_SUPABASE_SCHEMA || 'appescala';
+const SESSION_KEY = 'gestaoescala-session';
 
-  const [plantoes,  setPlantoes]  = useState([]);
-  const [turnos,    setTurnos]    = useState([]);
-  const [tenant,    setTenant]    = useState(null);
-  const [loading,   setLoading]   = useState(true);
+// ── REST helpers ──────────────────────────────────────────────
+async function restSignIn(email, password) {
+  const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: SB_KEY },
+    body: JSON.stringify({ email, password }),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error_description || d.message || 'Credenciais inválidas');
+  return d;
+}
+
+async function restSignOut(token) {
+  try {
+    await fetch(`${SB_URL}/auth/v1/logout`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${token}` },
+    });
+  } catch {}
+}
+
+async function restUpdatePassword(token, newPass) {
+  const r = await fetch(`${SB_URL}/auth/v1/user`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SB_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ password: newPass, data: { must_change_password: false } }),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.error_description || d.message || 'Erro ao atualizar senha');
+  }
+}
+
+async function buscarPerfil(token, authUserId) {
+  try {
+    const url = `${SB_URL}/rest/v1/usuarios?auth_user_id=eq.${authUserId}&ativo=eq.true&limit=1`;
+    const r = await fetch(url, {
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${token}`,
+        'Accept-Profile': SCHEMA,
+      },
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return Array.isArray(data) ? (data[0] || null) : null;
+  } catch { return null; }
+}
+
+// ── Persistência ──────────────────────────────────────────────
+function salvarSessao(token, refreshToken, user) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ token, refreshToken, user })); } catch {}
+}
+function lerSessao() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; }
+}
+function limparSessao() {
+  try { localStorage.removeItem(SESSION_KEY); } catch {}
+}
+
+// ── Sincroniza token com o SDK (para queries das páginas) ─────
+async function sincronizarSDK(token, refreshToken) {
+  try {
+    await supabase.auth.setSession({
+      access_token:  token,
+      refresh_token: refreshToken || '',
+    });
+  } catch {}
+}
+
+// ── Provider ──────────────────────────────────────────────────
+export function AuthProvider({ children }) {
+  const [token,      setToken]      = useState(null);
+  const [authUser,   setAuthUser]   = useState(null);
+  const [usuario,    setUsuario]    = useState(undefined);
+  const [loading,    setLoading]    = useState(true);
+  const [mustChange, setMustChange] = useState(false);
 
   useEffect(() => {
-    Promise.all([carregar(), buscarTurnos(), buscarTenant()]).then(() => {
+    // Escuta eventos do SDK — especialmente PASSWORD_RECOVERY
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('[Auth] SDK event:', event);
+
+        if (event === 'PASSWORD_RECOVERY') {
+          // Usuário clicou no link de reset — mostra tela de nova senha
+          const tok = session.access_token;
+          const ref = session.refresh_token || '';
+          await sincronizarSDK(tok, ref);
+          salvarSessao(tok, ref, session.user);
+          setToken(tok);
+          setAuthUser(session.user);
+          setMustChange(true);
+          setUsuario(null);
+          setLoading(false);
+          // Limpa o hash da URL para não redirecionar novamente
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      }
+    );
+
+    // Restaura sessão salva no localStorage
+    async function restaurar() {
+      const saved = lerSessao();
+      if (!saved?.token || !saved?.user?.id) {
+        setUsuario(null);
+        setLoading(false);
+        return;
+      }
+      await sincronizarSDK(saved.token, saved.refreshToken);
+      const perfil = await buscarPerfil(saved.token, saved.user.id);
+      if (!perfil) {
+        limparSessao();
+        await supabase.auth.signOut();
+        setUsuario(null);
+      } else {
+        const forceChange = saved.user.user_metadata?.must_change_password === true;
+        setToken(saved.token);
+        setAuthUser(saved.user);
+        setMustChange(forceChange);
+        setUsuario(forceChange ? null : perfil);
+      }
       setLoading(false);
-    });
+    }
+
+    // Verifica se há token de recovery na URL antes de restaurar sessão normal
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery')) {
+      // Deixa o onAuthStateChange tratar — ele vai disparar PASSWORD_RECOVERY
+      console.log('[Auth] Recovery token detectado na URL');
+      // Não chama restaurar() agora — aguarda o evento PASSWORD_RECOVERY
+      // Safety timeout: se o evento não vier em 5s, libera o loading
+      setTimeout(() => {
+        setLoading(prev => { if (prev) { setUsuario(null); return false; } return prev; });
+      }, 5000);
+    } else {
+      restaurar();
+    }
+
+    return () => listener?.subscription?.unsubscribe();
   }, []);
 
-  // Dispara impressão automática quando carregar
-  useEffect(() => {
-    if (!loading) {
-      setTimeout(() => window.print(), 500);
-    }
-  }, [loading]);
+  // ── Login ─────────────────────────────────────────────────
+  async function login(email, senha) {
+    const data = await restSignIn(email, senha);
+    const tok  = data.access_token;
+    const ref  = data.refresh_token || '';
+    const user = data.user;
+    const forceChange = user?.user_metadata?.must_change_password === true;
 
-  async function carregar() {
-    const inicio = new Date(ano, mes, 1).toISOString().slice(0, 10);
-    const fim    = new Date(ano, mes + 1, 0).toISOString().slice(0, 10);
+    await sincronizarSDK(tok, ref);
+    salvarSessao(tok, ref, user);
+    setToken(tok);
+    setAuthUser(user);
+    setMustChange(forceChange);
 
-    const query = supabase
-      .from('plantoes')
-      .select('*, turnos:turno_id(id,nome,ordem), prestadores:prestador_id(id,nome)')
-      .eq('tenant_id', TENANT_ID)
-      .eq('ativo', true)
-      .gte('data', inicio)
-      .lte('data', fim)
-      .not('status', 'eq', 'CANCELADO');
-
-    if (escId) query.eq('escala_id', escId);
-
-    const { data } = await query;
-    setPlantoes(data || []);
-  }
-
-  async function buscarTurnos() {
-    const { data } = await supabase
-      .from('turnos')
-      .select('id, nome, ordem')
-      .eq('tenant_id', TENANT_ID)
-      .eq('ativo', true)
-      .order('ordem');
-    setTurnos(data || []);
-  }
-
-  async function buscarTenant() {
-    const { data } = await supabase
-      .from('tenants')
-      .select('nome_sistema, logo_url')
-      .eq('id', TENANT_ID)
-      .single();
-    setTenant(data);
-  }
-
-  if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
-      minHeight:'100vh', fontFamily:'Arial, sans-serif', color:'#555' }}>
-      Preparando impressão...
-    </div>
-  );
-
-  // Monta estrutura de semanas
-  const primeiroDia = new Date(ano, mes, 1);
-  const ultimoDia   = new Date(ano, mes + 1, 0);
-  const totalDias   = ultimoDia.getDate();
-
-  // Agrupa plantões: { 'YYYY-MM-DD': { turno_id: [prestador_nome, ...] } }
-  const mapa = {};
-  for (const p of plantoes) {
-    if (!mapa[p.data]) mapa[p.data] = {};
-    const tid = p.turno_id;
-    if (!mapa[p.data][tid]) mapa[p.data][tid] = [];
-    if (p.prestadores?.nome) mapa[p.data][tid].push(p.prestadores.nome);
-  }
-
-  // Monta semanas (arrays de 7 dias, null = dia fora do mês)
-  const semanas = [];
-  let semanaAtual = new Array(7).fill(null);
-  for (let d = 1; d <= totalDias; d++) {
-    const data = new Date(ano, mes, d);
-    const dow  = data.getDay(); // 0=Dom
-    semanaAtual[dow] = d;
-    if (dow === 6 || d === totalDias) {
-      semanas.push([...semanaAtual]);
-      semanaAtual = new Array(7).fill(null);
+    if (!forceChange) {
+      const perfil = await buscarPerfil(tok, user.id);
+      setUsuario(perfil);
+    } else {
+      setUsuario(null);
     }
   }
 
-  const titulo = `${escNome.toUpperCase()} - ${MESES[mes].toUpperCase()}/${ano}`;
-  const logoUrl = tenant?.logo_url || '/logo.jpg';
+  // ── Logout ────────────────────────────────────────────────
+  async function logout() {
+    if (token) await restSignOut(token);
+    limparSessao();
+    await supabase.auth.signOut();
+    setToken(null);
+    setAuthUser(null);
+    setUsuario(null);
+    setMustChange(false);
+  }
 
-  // Estilos inline para impressão
-  const th = {
-    background: '#1a237e', color: '#fff', padding: '6px 4px',
-    fontSize: 11, fontWeight: 700, textAlign: 'center',
-    border: '1px solid #ccc',
-  };
-  const td = {
-    border: '1px solid #ddd', padding: '3px 4px',
-    fontSize: 10, verticalAlign: 'top', minHeight: 24,
-    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-  };
-  const tdTurno = {
-    ...td, fontWeight: 700, background: '#f5f5f5',
-    fontSize: 10, whiteSpace: 'nowrap', textAlign: 'left',
-    width: 52, color: '#1a237e',
-  };
-  const tdNum = {
-    ...td, textAlign: 'center', fontWeight: 700,
-    background: '#e8eaf6', color: '#1a237e', fontSize: 11,
-  };
-  const tdVazio = { ...td, background: '#fafafa' };
+  // ── Troca de senha ────────────────────────────────────────
+  async function trocarSenha(novaSenha) {
+    if (!token) throw new Error('Sem sessão ativa');
+    await restUpdatePassword(token, novaSenha);
+    const novoUser = {
+      ...authUser,
+      user_metadata: { ...(authUser?.user_metadata || {}), must_change_password: false },
+    };
+    salvarSessao(token, null, novoUser);
+    setAuthUser(novoUser);
+    setMustChange(false);
+    if (authUser?.id) {
+      const perfil = await buscarPerfil(token, authUser.id);
+      setUsuario(perfil);
+    }
+  }
+
+  const session        = token ? { access_token: token, user: authUser } : null;
+  const perfil         = usuario?.perfil || null;
+  const isMaster       = perfil === 'MASTER';
+  const isAdmin        = perfil === 'ADMIN' || isMaster;
+  const isOperador     = perfil === 'OPERADOR';
+  const isVisualizador = perfil === 'VISUALIZADOR';
 
   return (
-    <div style={{ fontFamily: 'Arial, sans-serif', padding: '12px 16px',
-      maxWidth: 900, margin: '0 auto', background: '#fff' }}>
-
-      <style>{`
-        @media print {
-          @page { size: A4 landscape; margin: 10mm; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        }
-        @media screen {
-          body { background: #eee; }
-          .print-wrap { box-shadow: 0 2px 12px rgba(0,0,0,.2); padding: 20px; background: #fff; }
-        }
-      `}</style>
-
-      <div className="print-wrap">
-        {/* Cabeçalho */}
-        <div style={{ display:'flex', alignItems:'center', marginBottom:12, gap:16 }}>
-          <img src={logoUrl} alt="Logo"
-            style={{ height:64, maxWidth:180, objectFit:'contain' }}
-            onError={e => e.target.style.display='none'} />
-          <div style={{ flex:1, textAlign:'center' }}>
-            <div style={{ fontSize:16, fontWeight:800, color:'#1a237e', letterSpacing:.5 }}>
-              {titulo}
-            </div>
-            <div style={{ fontSize:12, color:'#555', marginTop:3, fontWeight:600,
-              letterSpacing:1, textTransform:'uppercase' }}>
-              Escala de Plantões
-            </div>
-          </div>
-        </div>
-
-        {/* Tabela */}
-        <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
-          <thead>
-            <tr>
-              <th style={{ ...th, width:52 }}>Turno</th>
-              {DIAS_SEMANA.map(d => (
-                <th key={d} style={th}>{d}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {semanas.map((semana, si) => (
-              <>
-                {/* Linha de números dos dias */}
-                <tr key={`num-${si}`}>
-                  <td style={{ ...td, background:'#e8eaf6' }} />
-                  {semana.map((dia, di) => (
-                    <td key={di} style={dia ? tdNum : tdVazio}>
-                      {dia || ''}
-                    </td>
-                  ))}
-                </tr>
-
-                {/* Linhas de turno */}
-                {turnos.map(turno => (
-                  <tr key={`${si}-${turno.id}`}>
-                    <td style={tdTurno}>{turno.nome}</td>
-                    {semana.map((dia, di) => {
-                      if (!dia) return <td key={di} style={tdVazio} />;
-                      const dataStr = `${ano}-${String(mes+1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`;
-                      const nomes   = mapa[dataStr]?.[turno.id] || [];
-                      return (
-                        <td key={di} style={td}>
-                          {nomes.map((n, i) => (
-                            <div key={i} style={{ fontSize:9.5, lineHeight:1.4 }}>
-                              {n.startsWith('Dr') ? n : `Dr(a). ${n}`}
-                            </div>
-                          ))}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Rodapé */}
-        <div style={{ marginTop:16, borderTop:'1px solid #ddd', paddingTop:10,
-          display:'flex', justifyContent:'space-between', fontSize:10, color:'#888' }}>
-          <span>Gerado em {new Date().toLocaleDateString('pt-BR')}</span>
-          <span>________________________________________<br/>Responsável pela escala</span>
-        </div>
-      </div>
-    </div>
+    <AuthContext.Provider value={{
+      session, usuario, loading, mustChange,
+      login, logout, trocarSenha,
+      perfil, isMaster, isAdmin, isOperador, isVisualizador,
+      podeGerenciarUsuarios: isMaster,
+      podeAcessarCadastros:  isMaster || isAdmin,
+      podeGerenciarPlantoes: isMaster || isAdmin || isOperador,
+      podeConferir:          isMaster || isAdmin,
+    }}>
+      {children}
+    </AuthContext.Provider>
   );
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth deve ser usado dentro de AuthProvider');
+  return ctx;
 }
