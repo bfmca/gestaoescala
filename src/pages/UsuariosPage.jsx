@@ -102,6 +102,7 @@ export default function UsuariosPage() {
         .select('*')
         .eq('tenant_id', TENANT_ID)
         .eq('oculto', false)
+        .neq('email', EMAIL_MASTER)
         .order('nome');
 
       // Filtra ativos/inativos no front (pode ser null em contas recém-criadas)

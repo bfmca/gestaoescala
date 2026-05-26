@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Filter,
   Eraser,
+  Printer,
 } from 'lucide-react';
 
 import { supabase } from '../lib/supabase';
@@ -380,6 +381,18 @@ export default function CalendarioPage() {
     return plantoesFiltrados.filter((p) => p.status === status).length;
   }
 
+
+  function imprimirEscala() {
+    const params = new URLSearchParams({
+      ano,
+      mes,
+      escala_id:   filtroEscala !== 'todos' ? filtroEscala : '',
+      escala_nome: filtroEscala !== 'todos'
+        ? (escalas.find(e => e.id === filtroEscala)?.nome || 'Escala')
+        : 'Escala Mensal',
+    });
+    window.open(`/imprimir-escala?${params}`, '_blank');
+  }
   return (
     <div className="space-y-6">
       <PageHeader
@@ -387,6 +400,9 @@ export default function CalendarioPage() {
         subtitle="Visualize os plantões por mês, escala, turno e status"
         actions={
           <div className="flex gap-3">
+            <Button variant="secondary" onClick={imprimirEscala}>
+              <Printer size={14} style={{marginRight:4,display:'inline',verticalAlign:'middle'}} />Imprimir
+            </Button>
             <Button variant="secondary" onClick={irParaHoje}>
               Hoje
             </Button>
