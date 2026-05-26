@@ -16,6 +16,7 @@ import GestaoPlantoesPage  from './pages/GestaoPlantoesPage.jsx';
 import CalendarioPage      from './pages/CalendarioPage.jsx';
 import ConfiguracoesPage   from './pages/ConfiguracoesPage.jsx';
 import Dashboard           from './pages/Dashboard.jsx';
+import ImpressaoEscalaPage from './pages/ImpressaoEscalaPage.jsx';
 
 const TEMPO_INATIVIDADE = 15 * 60 * 1000;
 
@@ -185,7 +186,10 @@ export default function App() {
     <ToastProvider>
       <AuthProvider>
         <BrowserRouter>
-          <ProtectedApp />
+          <Routes>
+            <Route path="/imprimir-escala" element={<ImpressaoEscalaPage />} />
+            <Route path="/*" element={<ProtectedApp />} />
+          </Routes>
         </BrowserRouter>
       </AuthProvider>
     </ToastProvider>
