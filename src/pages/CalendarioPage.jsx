@@ -74,6 +74,8 @@ export default function CalendarioPage() {
   const [filtroStatus, setFiltroStatus] = useState('todos');
 
   const [plantaoSelecionado, setPlantaoSelecionado] = useState(null);
+  const [modalImpressao, setModalImpressao] = useState(false);
+  const [escalaSelecionadaImp, setEscalaSelecionadaImp] = useState('');
   const [editandoPrestador, setEditandoPrestador] = useState(false);
   const [buscaPrestador, setBuscaPrestador] = useState('');
 
@@ -382,15 +384,22 @@ export default function CalendarioPage() {
   }
 
 
-  function imprimirEscala() {
+  function abrirModalImpressao() {
+    // Pré-seleciona o filtro atual se houver
+    setEscalaSelecionadaImp(filtroEscala !== 'todos' ? filtroEscala : (escalas[0]?.id || ''));
+    setModalImpressao(true);
+  }
+
+  function confirmarImpressao() {
+    if (!escalaSelecionadaImp) return;
+    const escala = escalas.find(e => e.id === escalaSelecionadaImp);
     const params = new URLSearchParams({
       ano,
       mes,
-      escala_id:   filtroEscala !== 'todos' ? filtroEscala : '',
-      escala_nome: filtroEscala !== 'todos'
-        ? (escalas.find(e => e.id === filtroEscala)?.nome || 'Escala')
-        : 'Escala Mensal',
+      escala_id:   escalaSelecionadaImp,
+      escala_nome: escala?.nome || 'Escala',
     });
+    setModalImpressao(false);
     window.open(`/imprimir-escala?${params}`, '_blank');
   }
   return (
@@ -400,7 +409,7 @@ export default function CalendarioPage() {
         subtitle="Visualize os plantões por mês, escala, turno e status"
         actions={
           <div className="flex gap-3">
-            <Button variant="secondary" onClick={imprimirEscala}>
+            <Button variant="secondary" onClick={abrirModalImpressao}>
               <Printer size={14} style={{marginRight:4,display:'inline',verticalAlign:'middle'}} />Imprimir
             </Button>
             <Button variant="secondary" onClick={irParaHoje}>
@@ -784,6 +793,56 @@ export default function CalendarioPage() {
               <Button variant="secondary" onClick={fecharModal}>
                 Fechar
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal selecao de escala para impressao */}
+      {modalImpressao && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7">
+            <div className="text-lg font-extrabold text-slate-900 mb-1">Imprimir escala</div>
+            <p className="text-slate-500 text-sm mb-5">
+              Selecione a escala e o mês que deseja imprimir.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  Escala *
+                </label>
+                <select
+                  value={escalaSelecionadaImp}
+                  onChange={e => setEscalaSelecionadaImp(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-700"
+                >
+                  <option value="">Selecione uma escala...</option>
+                  {escalas.map(e => (
+                    <option key={e.id} value={e.id}>{e.nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="bg-slate-50 rounded-xl px-4 py-3 text-sm text-slate-600">
+                Período: <strong>{meses[mes]}/{ano}</strong>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setModalImpressao(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-semibold text-sm hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarImpressao}
+                disabled={!escalaSelecionadaImp}
+                className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm disabled:opacity-40 hover:bg-slate-800 transition"
+              >
+                Imprimir
+              </button>
             </div>
           </div>
         </div>
