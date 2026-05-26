@@ -221,12 +221,12 @@ export default function ImpressaoEscalaPage() {
         </table>
 
         {/* Rodapé */}
-        <div style={{ marginTop:24, borderTop:'1px solid #ddd', paddingTop:16,
+        <div style={{ marginTop:24, paddingTop:16,
           display:'flex', justifyContent:'space-between', fontSize:10, color:'#888' }}>
           <span>Gerado em {new Date().toLocaleDateString('pt-BR')}</span>
           <div style={{textAlign:'center'}}>
-            <div style={{fontSize:10, color:'#555', marginBottom:4}}>Responsável pela escala</div>
-            <div style={{borderTop:'1px solid #555', width:240, margin:'0 auto'}}></div>
+            <div style={{borderBottom:'1px solid #555', width:240, margin:'0 auto 6px'}}>&nbsp;</div>
+            <div style={{fontSize:10, color:'#555'}}>Responsável pela escala</div>
           </div>
         </div>
       </div>
