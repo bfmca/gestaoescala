@@ -6,6 +6,7 @@ import { Search, Plus, Pencil, Filter, Eraser } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 import Button from '../components/ui/Button.jsx';
+import { useToast } from '../components/ui/ToastProvider.jsx';
 import Card from '../components/ui/Card.jsx';
 import PageHeader from '../components/ui/PageHeader.jsx';
 
@@ -29,6 +30,7 @@ const formInicial = {
 };
 
 export default function PrestadoresPage() {
+  const toast = useToast();
   const [prestadores, setPrestadores] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -132,33 +134,38 @@ export default function PrestadoresPage() {
 
   async function salvarPrestador() {
     if (!form.nome.trim()) {
-      alert('Informe o nome do prestador.');
+      toast.error('Campo obrigatório', 'Informe o nome do prestador.');
       return;
     }
 
     try {
       setSaving(true);
 
+      // Remove id do payload em novos registros (deixa o banco gerar)
+      const { id, ...rest } = form;
       const payload = {
-        ...form,
+        ...rest,
         tenant_id: TENANT_ID,
-        valor_contrato:
-          form.valor_contrato === '' ? 0 : Number(form.valor_contrato),
+        valor_contrato: form.valor_contrato === '' ? 0 : Number(form.valor_contrato),
       };
 
-      const { error } = form.id
-        ? await supabase.from('prestadores').update(payload).eq('id', form.id)
+      const { error } = id
+        ? await supabase.from('prestadores').update(payload).eq('id', id)
         : await supabase.from('prestadores').insert(payload);
 
       if (error) {
-        console.error(error);
-        alert('Erro ao salvar prestador.');
+        console.error('[Prestadores] Erro ao salvar:', error);
+        toast.error('Erro ao salvar', error.message || 'Verifique o console.');
         return;
       }
 
       setModalOpen(false);
       setForm(formInicial);
       buscarPrestadores();
+      toast.success('Prestador salvo', `${form.nome} foi salvo com sucesso.`);
+    } catch (err) {
+      console.error('[Prestadores] Exceção:', err);
+      toast.error('Erro inesperado', err.message || 'Tente novamente.');
     } finally {
       setSaving(false);
     }

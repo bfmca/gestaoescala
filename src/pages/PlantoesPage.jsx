@@ -49,13 +49,13 @@ const formInicial = {
   data_fim: '',
   turnos_ids: [],
   prestador_id: '',
-  gerar_domingo: true,
+  gerar_domingo: false,
   gerar_segunda: true,
   gerar_terca: true,
   gerar_quarta: true,
   gerar_quinta: true,
   gerar_sexta: true,
-  gerar_sabado: true,
+  gerar_sabado: false,
 };
 
 export default function PlantoesPage() {

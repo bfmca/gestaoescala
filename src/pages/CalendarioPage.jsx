@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   CalendarDays,
   Filter,
   Eraser,
   Printer,
+  Search,
 } from 'lucide-react';
 
 import { supabase } from '../lib/supabase';
@@ -70,8 +72,11 @@ export default function CalendarioPage() {
   const [escalas, setEscalas] = useState([]);
   const [prestadores, setPrestadores] = useState([]);
 
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [filtroEscala, setFiltroEscala] = useState('todos');
   const [filtroStatus, setFiltroStatus] = useState('todos');
+  const [filtroPrestador, setFiltroPrestador] = useState('todos');
+  const [buscaAtivada, setBuscaAtivada] = useState(false);
 
   const [plantaoSelecionado, setPlantaoSelecionado] = useState(null);
   const [modalImpressao, setModalImpressao] = useState(false);
@@ -80,12 +85,15 @@ export default function CalendarioPage() {
   const [buscaPrestador, setBuscaPrestador] = useState('');
 
   useEffect(() => {
-    carregarDados();
-  }, [ano, mes]);
+    // Carrega dados de suporte (escalas, prestadores) sempre
+    buscarEscalas();
+    buscarPrestadores();
+  }, []);
 
-  async function carregarDados() {
-    await Promise.all([buscarPlantoes(), buscarEscalas(), buscarPrestadores()]);
-  }
+  // Ao mudar mês: recarrega plantões apenas se já havia buscado antes
+  useEffect(() => {
+    if (buscaAtivada) buscarPlantoes();
+  }, [ano, mes]);
 
   async function buscarPlantoes() {
     const dataInicio = new Date(ano, mes, 1);
@@ -138,6 +146,7 @@ export default function CalendarioPage() {
     });
 
     setPlantoes(ordenados);
+    setBuscaAtivada(true);
   }
 
   async function buscarEscalas() {
@@ -194,9 +203,12 @@ export default function CalendarioPage() {
       const statusOk =
         filtroStatus === 'todos' ? true : plantao.status === filtroStatus;
 
-      return escalaOk && statusOk;
+      const prestadorOk =
+        filtroPrestador === 'todos' ? true : plantao.prestador_id === filtroPrestador;
+
+      return escalaOk && statusOk && prestadorOk;
     });
-  }, [plantoes, filtroEscala, filtroStatus]);
+  }, [plantoes, filtroEscala, filtroStatus, filtroPrestador]);
 
   const diasCalendario = useMemo(() => {
     const primeiroDia = new Date(ano, mes, 1);
@@ -257,6 +269,7 @@ export default function CalendarioPage() {
   function limparFiltros() {
     setFiltroEscala('todos');
     setFiltroStatus('todos');
+    setFiltroPrestador('todos');
   }
 
   function abrirDetalhesPlantao(plantao) {
@@ -420,114 +433,115 @@ export default function CalendarioPage() {
       />
 
       <Card>
-        <div className="p-5 md:p-6 space-y-5">
-          <div className="flex items-center gap-2">
-            <Filter size={18} />
-
-            <h2 className="font-semibold text-lg text-slate-900">Filtros</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-            <div className="md:col-span-4">
-              <label className="block text-sm font-semibold text-slate-600 mb-2">
-                Escala
-              </label>
-
-              <select
-                value={filtroEscala}
-                onChange={(e) => setFiltroEscala(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-4 py-3"
-              >
-                <option value="todos">Todas</option>
-
-                {escalas.map((escala) => (
-                  <option key={escala.id} value={escala.id}>
-                    {escala.nome}
-                  </option>
-                ))}
-              </select>
+        <div className="p-4 md:p-5">
+          <button
+            onClick={() => setMostrarFiltros(f => !f)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Filter size={16} className="text-slate-500" />
+              <span className="font-semibold text-slate-900">Filtros</span>
+              {(filtroEscala !== 'todos' || filtroStatus !== 'todos' || filtroPrestador !== 'todos') && (
+                <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">ativos</span>
+              )}
             </div>
+            <ChevronDown
+              size={16}
+              className={`text-slate-400 transition-transform ${mostrarFiltros ? 'rotate-180' : ''}`}
+            />
+          </button>
 
-            <div className="md:col-span-4">
-              <label className="block text-sm font-semibold text-slate-600 mb-2">
-                Status
-              </label>
+          {mostrarFiltros && (
+            <>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+              <div className="md:col-span-3">
+                <label className="block text-sm font-semibold text-slate-600 mb-2">Escala</label>
+                <select
+                  value={filtroEscala}
+                  onChange={(e) => setFiltroEscala(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3"
+                >
+                  <option value="todos">Todas</option>
+                  {escalas.map((escala) => (
+                    <option key={escala.id} value={escala.id}>{escala.nome}</option>
+                  ))}
+                </select>
+              </div>
 
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-4 py-3"
-              >
-                <option value="todos">Todos</option>
-                <option value="ABERTO">Aberto</option>
-                <option value="ESCALADO">Escalado</option>
-                <option value="CONFERIDO">Conferido</option>
-                <option value="PAGO">Pago</option>
-                <option value="CANCELADO">Cancelado</option>
-              </select>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-semibold text-slate-600 mb-2">Profissional</label>
+                <select
+                  value={filtroPrestador}
+                  onChange={(e) => setFiltroPrestador(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3"
+                >
+                  <option value="todos">Todos</option>
+                  {prestadores.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome}{p.empresa ? ` — ${p.empresa}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="block text-sm font-semibold text-slate-600 mb-2">Status</label>
+                <select
+                  value={filtroStatus}
+                  onChange={(e) => setFiltroStatus(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3"
+                >
+                  <option value="todos">Todos</option>
+                  <option value="ABERTO">Aberto</option>
+                  <option value="ESCALADO">Escalado</option>
+                  <option value="CONFERIDO">Conferido</option>
+                  <option value="PAGO">Pago</option>
+                  <option value="CANCELADO">Cancelado</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-1">
+                <button
+                  onClick={limparFiltros}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 flex items-center justify-center"
+                >
+                  <Eraser size={16} />
+                </button>
+              </div>
             </div>
-
-            <div className="md:col-span-1">
+            <div className="flex justify-end pt-2">
               <button
-                onClick={limparFiltros}
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 flex items-center justify-center"
+                onClick={buscarPlantoes}
+                className="px-6 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition flex items-center gap-2"
               >
-                <Eraser size={16} />
+                <Search size={15} /> Buscar
               </button>
             </div>
-          </div>
+          </>
+          )}
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <div className="p-4">
-            <div className="text-sm text-slate-500">Aberto</div>
-            <div className="text-2xl font-bold text-rose-700">
-              {totalPorStatus('ABERTO')}
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="p-4">
-            <div className="text-sm text-slate-500">Escalado</div>
-            <div className="text-2xl font-bold text-sky-700">
-              {totalPorStatus('ESCALADO')}
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="p-4">
-            <div className="text-sm text-slate-500">Conferido</div>
-            <div className="text-2xl font-bold text-emerald-700">
-              {totalPorStatus('CONFERIDO')}
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="p-4">
-            <div className="text-sm text-slate-500">Pago</div>
-            <div className="text-2xl font-bold text-violet-700">
-              {totalPorStatus('PAGO')}
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="p-4">
-            <div className="text-sm text-slate-500">Cancelado</div>
-            <div className="text-2xl font-bold text-slate-700">
-              {totalPorStatus('CANCELADO')}
-            </div>
-          </div>
-        </Card>
-      </div>
+      {mostrarFiltros && buscaAtivada && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <Card><div className="p-3"><div className="text-xs text-slate-500">Aberto</div><div className="text-xl font-bold text-rose-700">{totalPorStatus('ABERTO')}</div></div></Card>
+          <Card><div className="p-3"><div className="text-xs text-slate-500">Escalado</div><div className="text-xl font-bold text-sky-700">{totalPorStatus('ESCALADO')}</div></div></Card>
+          <Card><div className="p-3"><div className="text-xs text-slate-500">Conferido</div><div className="text-xl font-bold text-emerald-700">{totalPorStatus('CONFERIDO')}</div></div></Card>
+          <Card><div className="p-3"><div className="text-xs text-slate-500">Pago</div><div className="text-xl font-bold text-violet-700">{totalPorStatus('PAGO')}</div></div></Card>
+          <Card><div className="p-3"><div className="text-xs text-slate-500">Cancelado</div><div className="text-xl font-bold text-slate-700">{totalPorStatus('CANCELADO')}</div></div></Card>
+        </div>
+      )}
 
       <Card>
         <div className="p-5 md:p-6">
+          {!buscaAtivada ? (
+            <div className="py-16 text-center text-slate-400">
+              <div className="text-3xl mb-3 opacity-30">📅</div>
+              <div className="font-semibold text-slate-500">Selecione os filtros e clique em Buscar</div>
+              <div className="text-sm mt-1">Abra o painel de filtros acima para carregar o calendário</div>
+            </div>
+          ) : (
+          <>
           <div className="flex items-center justify-between mb-6">
             <button
               onClick={mesAnterior}
@@ -635,6 +649,8 @@ export default function CalendarioPage() {
               </div>
             ))}
           </div>
+          </>
+          )}
         </div>
       </Card>
 

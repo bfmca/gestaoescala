@@ -7,6 +7,7 @@ import {
   Eraser,
   XCircle,
   RotateCcw,
+  ChevronDown,
 } from 'lucide-react';
 
 import { supabase } from '../lib/supabase';
@@ -51,11 +52,12 @@ export default function GestaoPlantoesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [buscaAtivada, setBuscaAtivada] = useState(false);
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [filtroEscala, setFiltroEscala] = useState('todos');
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataFim, setDataFim] = useState('');
+  const [dataInicio, setDataInicio] = useState('2026-05-01');
+  const [dataFim, setDataFim] = useState('2026-05-31');
 
   const [form, setForm] = useState(formInicial);
 
@@ -69,36 +71,29 @@ export default function GestaoPlantoesPage() {
   }, []);
 
   async function carregarDados() {
-    await Promise.all([buscarPlantoes(), buscarPrestadores(), buscarEscalas()]);
+    // Plantões só carregam ao clicar Buscar — evita carga desnecessária
+    await Promise.all([buscarPrestadores(), buscarEscalas()]);
   }
 
   async function buscarPlantoes() {
-    const { data, error } = await supabase
+    let query = supabase
       .from('plantoes')
-      .select(
-        `
+      .select(`
         *,
-        escalas:escala_id (
-          id,
-          nome,
-          cor
-        ),
-        turnos:turno_id (
-          id,
-          nome,
-          sigla,
-          cor,
-          ordem
-        ),
-        prestadores:prestador_id (
-          id,
-          nome,
-          empresa
-        )
-      `
-      )
+        escalas:escala_id (id, nome, cor),
+        turnos:turno_id (id, nome, sigla, cor, ordem),
+        prestadores:prestador_id (id, nome, empresa)
+      `)
       .eq('tenant_id', TENANT_ID)
       .eq('ativo', true);
+
+    // Aplica filtros server-side para reduzir volume de dados
+    if (dataInicio) query = query.gte('data', dataInicio);
+    if (dataFim)    query = query.lte('data', dataFim);
+    if (filtroEscala !== 'todos') query = query.eq('escala_id', filtroEscala);
+    if (filtroStatus !== 'todos') query = query.eq('status', filtroStatus);
+
+    const { data, error } = await query.order('data').order('id');
 
     if (error) {
       toast.error('Erro ao carregar plantões', error.message);
@@ -111,6 +106,7 @@ export default function GestaoPlantoesPage() {
     });
 
     setPlantoes(ordenados);
+    setBuscaAtivada(true);
   }
 
   async function buscarPrestadores() {
@@ -418,12 +414,11 @@ export default function GestaoPlantoesPage() {
       />
 
       <Card>
-        <div className="p-5 md:p-6 space-y-5">
+        <div className="p-4 md:p-5 space-y-4">
           <div className="flex items-center gap-2">
-            <Filter size={18} />
-            <h2 className="font-semibold text-lg text-slate-900">Filtros</h2>
+            <Filter size={16} className="text-slate-500" />
+            <span className="font-semibold text-slate-900">Filtros</span>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
             <div className="md:col-span-3">
               <label className="block text-sm font-semibold text-slate-600 mb-2">
@@ -520,24 +515,31 @@ export default function GestaoPlantoesPage() {
               </button>
             </div>
           </div>
+          <div className="flex justify-end">
+            <button
+              onClick={buscarPlantoes}
+              className="px-6 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition flex items-center gap-2"
+            >
+              <Search size={15} /> Buscar
+            </button>
+          </div>
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      {buscaAtivada && (
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {statusOptions.map((status) => (
           <Card key={status.value}>
-            <div className="p-4">
-              <div className="text-sm text-slate-500">{status.label}</div>
-              <div className="text-2xl font-bold text-slate-900">
-                {
-                  plantoes.filter((plantao) => plantao.status === status.value)
-                    .length
-                }
+            <div className="p-3">
+              <div className="text-xs text-slate-500">{status.label}</div>
+              <div className="text-xl font-bold text-slate-900">
+                {plantoes.filter((plantao) => plantao.status === status.value).length}
               </div>
             </div>
           </Card>
         ))}
       </div>
+      )}
 
       <Card>
         <div className="overflow-x-visible">
@@ -718,9 +720,16 @@ export default function GestaoPlantoesPage() {
             </tbody>
           </table>
 
-          {plantoesFiltrados.length === 0 && (
+          {!buscaAtivada && (
+            <div className="p-10 text-center text-slate-400">
+              <div className="text-3xl mb-3 opacity-30">🔍</div>
+              <div className="font-semibold text-slate-500">Selecione os filtros e clique em Buscar</div>
+              <div className="text-sm mt-1">Use os filtros acima para carregar os plantões</div>
+            </div>
+          )}
+          {buscaAtivada && plantoesFiltrados.length === 0 && (
             <div className="p-10 text-center text-slate-500">
-              Nenhum plantão encontrado.
+              Nenhum plantão encontrado para os filtros selecionados.
             </div>
           )}
         </div>
