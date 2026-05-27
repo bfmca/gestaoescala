@@ -16,6 +16,9 @@ import GestaoPlantoesPage  from './pages/GestaoPlantoesPage.jsx';
 import CalendarioPage      from './pages/CalendarioPage.jsx';
 import ConfiguracoesPage   from './pages/ConfiguracoesPage.jsx';
 import Dashboard           from './pages/Dashboard.jsx';
+import ProducaoPage        from './pages/ProducaoPage.jsx';
+import ColaboradoresPage   from './pages/ColaboradoresPage.jsx';
+import TransferenciasPage  from './pages/TransferenciasPage.jsx';
 import ImpressaoEscalaPage from './pages/ImpressaoEscalaPage.jsx';
 
 const TEMPO_INATIVIDADE = 15 * 60 * 1000;
@@ -38,6 +41,9 @@ const ROUTE_PERFIS = {
   '/plantoes':        ['MASTER', 'ADMIN'],
   '/gestao-plantoes': ['MASTER', 'ADMIN', 'OPERADOR'],
   '/calendario':      ['MASTER', 'ADMIN', 'OPERADOR', 'VISUALIZADOR'],
+  '/colaboradores':   ['MASTER', 'ADMIN'],
+  '/producao':        ['MASTER', 'ADMIN', 'OPERADOR'],
+  '/transferencias':  ['MASTER', 'ADMIN', 'OPERADOR'],
   '/relatorios':      ['MASTER', 'ADMIN'],
 };
 
@@ -169,6 +175,9 @@ function ProtectedApp() {
         <Route path="/gestao-plantoes" element={<Rota path="/gestao-plantoes" element={<GestaoPlantoesPage />} />} />
         <Route path="/calendario"      element={<Rota path="/calendario"      element={<CalendarioPage />} />} />
         <Route path="/configuracoes"   element={<Rota path="/configuracoes"   element={<ConfiguracoesPage />} />} />
+        <Route path="/colaboradores" element={<Rota path="/colaboradores" element={<ColaboradoresPage />} />} />
+        <Route path="/producao"       element={<Rota path="/producao"       element={<ProducaoPage />} />} />
+        <Route path="/transferencias" element={<Rota path="/transferencias" element={<TransferenciasPage />} />} />
         <Route path="/relatorios"      element={<Rota path="/relatorios"      element={
           <div className="bg-white rounded-2xl border border-slate-200 p-8">
             <h1 className="text-xl font-bold text-slate-900">Relatórios</h1>

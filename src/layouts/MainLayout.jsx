@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardPlus, BarChart3,
   ChevronDown, FolderKanban, LogOut, KeyRound, CalendarDays,
+  TrendingUp, Ambulance,
 } from 'lucide-react';
 
 import { supabase } from '../lib/supabase';
@@ -53,15 +54,18 @@ const MENUS = {
         { path: '/calendario',      label: 'Calendário'          },
       ],
     },
+    { path: '/producao',       icon: TrendingUp, label: 'Produção'        },
+    { path: '/transferencias', icon: Ambulance,  label: 'Transferências'  },
     {
       id: 'cadastros', icon: FolderKanban, label: 'Cadastros',
       children: [
-        { path: '/usuarios',      label: 'Usuários'      },
-        { path: '/prestadores',   label: 'Prestadores'   },
-        { path: '/escalas',       label: 'Escalas'       },
-        { path: '/turnos',        label: 'Turnos'        },
-        { path: '/remuneracao',   label: 'Remuneração'   },
+        { path: '/colaboradores', label: 'Colaboradores' },
         { path: '/configuracoes', label: 'Configurações' },
+        { path: '/escalas',       label: 'Escalas'       },
+        { path: '/prestadores',   label: 'Prestadores'   },
+        { path: '/remuneracao',   label: 'Remuneração'   },
+        { path: '/turnos',        label: 'Turnos'        },
+        { path: '/usuarios',      label: 'Usuários'      },
       ],
     },
     { path: '/relatorios', icon: BarChart3, label: 'Relatórios' },
@@ -77,13 +81,16 @@ const MENUS = {
         { path: '/calendario',      label: 'Calendário'          },
       ],
     },
+    { path: '/producao',       icon: TrendingUp, label: 'Produção'        },
+    { path: '/transferencias', icon: Ambulance,  label: 'Transferências'  },
     {
       id: 'cadastros', icon: FolderKanban, label: 'Cadastros',
       children: [
-        { path: '/prestadores', label: 'Prestadores' },
-        { path: '/escalas',     label: 'Escalas'     },
-        { path: '/turnos',      label: 'Turnos'      },
-        { path: '/remuneracao', label: 'Remuneração' },
+        { path: '/colaboradores', label: 'Colaboradores' },
+        { path: '/escalas',       label: 'Escalas'       },
+        { path: '/prestadores',   label: 'Prestadores'   },
+        { path: '/remuneracao',   label: 'Remuneração'   },
+        { path: '/turnos',        label: 'Turnos'        },
       ],
     },
     { path: '/relatorios', icon: BarChart3, label: 'Relatórios' },
