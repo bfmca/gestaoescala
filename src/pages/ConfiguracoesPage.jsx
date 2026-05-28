@@ -94,6 +94,8 @@ export default function ConfiguracoesPage() {
         cor_secundaria: data.cor_secundaria || '#D4A62A',
 
         cor_fundo: data.cor_fundo || '#F1F5F9',
+        cidade_assinatura: data.cidade_assinatura || 'Brasilândia-MS',
+        primeiro_dia_semana: data.primeiro_dia_semana ?? 0,
       });
     } finally {
       setLoading(false);
@@ -116,6 +118,8 @@ export default function ConfiguracoesPage() {
           cor_secundaria: form.cor_secundaria,
 
           cor_fundo: form.cor_fundo,
+          cidade_assinatura: form.cidade_assinatura,
+          primeiro_dia_semana: form.primeiro_dia_semana,
         })
         .eq('id', TENANT_ID);
 

@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 
 import Button from '../components/ui/Button.jsx';
 import { useToast } from '../components/ui/ToastProvider.jsx';
+import SelectWithAdd from '../components/ui/SelectWithAdd.jsx';
 import Card from '../components/ui/Card.jsx';
 import PageHeader from '../components/ui/PageHeader.jsx';
 
@@ -26,12 +27,15 @@ const formInicial = {
   contrato_fixo: false,
   valor_contrato: '',
   descricao_contrato: '',
+  categoria_contrato_id: '',
+  cor: '',
   ativo: true,
 };
 
 export default function PrestadoresPage() {
   const toast = useToast();
   const [prestadores, setPrestadores] = useState([]);
+  const [categoriasContrato, setCategoriasContrato] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [aba, setAba] = useState('ativos');
@@ -46,7 +50,23 @@ export default function PrestadoresPage() {
 
   useEffect(() => {
     buscarPrestadores();
+    buscarCategoriasContrato();
   }, []);
+
+  async function buscarCategoriasContrato() {
+    const { data } = await supabase.from('categorias_contrato')
+      .select('id,nome').eq('tenant_id', TENANT_ID).eq('ativo',true).order('ordem');
+    setCategoriasContrato(data||[]);
+  }
+
+  async function addCategoriaContrato(nome) {
+    const { data, error } = await supabase.from('categorias_contrato')
+      .insert({ tenant_id: TENANT_ID, nome, ativo: true })
+      .select().single();
+    if (error) throw error;
+    setCategoriasContrato(prev => [...prev, data].sort((a,b)=>a.nome.localeCompare(b.nome)));
+    return data;
+  }
 
   async function buscarPrestadores() {
     const { data, error } = await supabase
@@ -465,6 +485,27 @@ export default function PrestadoresPage() {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Cor na escala
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={form.cor || '#0F172A'}
+                    onChange={e => setForm({ ...form, cor: e.target.value })}
+                    style={{ width:48, height:38, padding:2, border:'1.5px solid #CBD5E1', borderRadius:8, cursor:'pointer' }}
+                  />
+                  <div className="flex-1 text-sm font-mono text-slate-600 bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-200">
+                    {form.cor || 'Sem cor definida'}
+                  </div>
+                  {form.cor && (
+                    <button type="button" onClick={()=>setForm({...form,cor:''})}
+                      className="text-xs text-slate-400 hover:text-slate-700">limpar</button>
+                  )}
+                </div>
+              </div>
+
               <div className="md:col-span-2">
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Endereço
@@ -611,6 +652,17 @@ export default function PrestadoresPage() {
                   </div>
                 </>
               )}
+
+              <div className="md:col-span-2">
+                <SelectWithAdd
+                  label="Categoria (consolidado)"
+                  value={form.categoria_contrato_id}
+                  onChange={v=>setForm({...form,categoria_contrato_id:v})}
+                  options={categoriasContrato}
+                  onAdd={addCategoriaContrato}
+                  placeholder="Selecione ou crie..."
+                />
+              </div>
 
               <div className="md:col-span-2 mt-2">
                 <div

@@ -19,7 +19,11 @@ import Dashboard           from './pages/Dashboard.jsx';
 import ProducaoPage        from './pages/ProducaoPage.jsx';
 import ColaboradoresPage   from './pages/ColaboradoresPage.jsx';
 import TransferenciasPage  from './pages/TransferenciasPage.jsx';
-import ImpressaoEscalaPage from './pages/ImpressaoEscalaPage.jsx';
+import ImpressaoEscalaPage         from './pages/ImpressaoEscalaPage.jsx';
+import ImpressaoRelatorioServicos  from './pages/ImpressaoRelatorioServicos.jsx';
+import ImpressaoRelatorioMedico    from './pages/ImpressaoRelatorioMedico.jsx';
+import ImpressaoConsolidado        from './pages/ImpressaoConsolidado.jsx';
+import RelatoriosPage              from './pages/RelatoriosPage.jsx';
 
 const TEMPO_INATIVIDADE = 15 * 60 * 1000;
 
@@ -178,12 +182,7 @@ function ProtectedApp() {
         <Route path="/colaboradores" element={<Rota path="/colaboradores" element={<ColaboradoresPage />} />} />
         <Route path="/producao"       element={<Rota path="/producao"       element={<ProducaoPage />} />} />
         <Route path="/transferencias" element={<Rota path="/transferencias" element={<TransferenciasPage />} />} />
-        <Route path="/relatorios"      element={<Rota path="/relatorios"      element={
-          <div className="bg-white rounded-2xl border border-slate-200 p-8">
-            <h1 className="text-xl font-bold text-slate-900">Relatórios</h1>
-            <p className="text-slate-500 mt-2 text-sm">Em desenvolvimento.</p>
-          </div>
-        } />} />
+        <Route path="/relatorios"      element={<Rota path="/relatorios"      element={<RelatoriosPage />} />} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Routes>
     </MainLayout>
@@ -196,7 +195,10 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/imprimir-escala" element={<ImpressaoEscalaPage />} />
+            <Route path="/imprimir-escala"            element={<ImpressaoEscalaPage />} />
+            <Route path="/imprimir-relatorio-servicos" element={<ImpressaoRelatorioServicos />} />
+            <Route path="/imprimir-relatorio-medico"   element={<ImpressaoRelatorioMedico />} />
+            <Route path="/imprimir-consolidado"        element={<ImpressaoConsolidado />} />
             <Route path="/*" element={<ProtectedApp />} />
           </Routes>
         </BrowserRouter>

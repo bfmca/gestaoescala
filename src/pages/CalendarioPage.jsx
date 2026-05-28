@@ -77,6 +77,8 @@ export default function CalendarioPage() {
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [filtroPrestador, setFiltroPrestador] = useState('todos');
   const [buscaAtivada, setBuscaAtivada] = useState(false);
+  const [configPrimeiroDia, setConfigPrimeiroDia] = useState(0); // 0=Dom, 1=Seg
+  const [coresPrest,    setCoresPrest]    = useState({}); // {prestador_id: cor}
 
   const [plantaoSelecionado, setPlantaoSelecionado] = useState(null);
   const [modalImpressao, setModalImpressao] = useState(false);
@@ -85,10 +87,17 @@ export default function CalendarioPage() {
   const [buscaPrestador, setBuscaPrestador] = useState('');
 
   useEffect(() => {
-    // Carrega dados de suporte (escalas, prestadores) sempre
     buscarEscalas();
     buscarPrestadores();
+    buscarTenantConfig();
   }, []);
+
+  async function buscarTenantConfig() {
+    const { data } = await supabase
+      .from('tenants').select('primeiro_dia_semana')
+      .eq('id', TENANT_ID).single();
+    if (data?.primeiro_dia_semana != null) setConfigPrimeiroDia(data.primeiro_dia_semana);
+  }
 
   // Ao mudar mês: recarrega plantões apenas se já havia buscado antes
   useEffect(() => {
@@ -167,7 +176,7 @@ export default function CalendarioPage() {
   async function buscarPrestadores() {
     const { data, error } = await supabase
       .from('prestadores')
-      .select('id, nome, empresa')
+      .select('id, nome, empresa, cor')
       .eq('tenant_id', TENANT_ID)
       .eq('ativo', true)
       .eq('plantonista', true)
@@ -180,6 +189,7 @@ export default function CalendarioPage() {
     }
 
     setPrestadores(data || []);
+    const cm = {}; (data||[]).forEach(p => { if(p.cor) cm[p.id]=p.cor; }); setCoresPrest(cm);
   }
 
   const prestadoresFiltrados = useMemo(() => {
@@ -211,11 +221,12 @@ export default function CalendarioPage() {
   }, [plantoes, filtroEscala, filtroStatus, filtroPrestador]);
 
   const diasCalendario = useMemo(() => {
-    const primeiroDia = new Date(ano, mes, 1);
+    const primeiroDiaData = new Date(ano, mes, 1);
     const ultimoDia = new Date(ano, mes + 1, 0);
 
     const dias = [];
-    const inicioSemana = primeiroDia.getDay();
+    const dowNativo = primeiroDiaData.getDay(); // 0=Dom
+    const inicioSemana = configPrimeiroDia === 1 ? (dowNativo + 6) % 7 : dowNativo;
     const totalDias = ultimoDia.getDate();
 
     for (let i = 0; i < inicioSemana; i++) {
@@ -238,7 +249,7 @@ export default function CalendarioPage() {
     }
 
     return dias;
-  }, [ano, mes, plantoesFiltrados]);
+  }, [ano, mes, plantoesFiltrados, configPrimeiroDia]);
 
   function mesAnterior() {
     if (mes === 0) {
@@ -398,7 +409,6 @@ export default function CalendarioPage() {
 
 
   function abrirModalImpressao() {
-    // Pré-seleciona o filtro atual se houver
     setEscalaSelecionadaImp(filtroEscala !== 'todos' ? filtroEscala : (escalas[0]?.id || ''));
     setModalImpressao(true);
   }
@@ -407,8 +417,7 @@ export default function CalendarioPage() {
     if (!escalaSelecionadaImp) return;
     const escala = escalas.find(e => e.id === escalaSelecionadaImp);
     const params = new URLSearchParams({
-      ano,
-      mes,
+      ano, mes,
       escala_id:   escalaSelecionadaImp,
       escala_nome: escala?.nome || 'Escala',
     });
