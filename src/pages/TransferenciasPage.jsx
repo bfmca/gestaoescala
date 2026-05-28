@@ -52,6 +52,11 @@ export default function TransferenciasPage() {
   const [saving,         setSaving]         = useState(false);
   const [formTransf,     setFormTransf]     = useState(formTransfIni);
   const [detalhes,       setDetalhes]       = useState(null);
+  const [buscaMedico,    setBuscaMedico]    = useState('');
+  const [showMedicos,    setShowMedicos]    = useState(false);
+  const [modalCidade,    setModalCidade]    = useState(false);
+  const [formCidadeEdit, setFormCidadeEdit] = useState({id:null,nome:'',estado:'',valor_transferencia:''});
+  const [savingCidade,   setSavingCidade]   = useState(false);
 
   // Filtros transferências
   const hoje = new Date();
@@ -77,13 +82,22 @@ export default function TransferenciasPage() {
     buscarSupporte();
   }, []);
 
-  async function addCidade(nome) {
-    const { data, error } = await supabase.from('cidades')
-      .insert({ tenant_id: TENANT_ID, nome, ativo: true })
-      .select().single();
+  async function addOuEditarCidade(cidadeData) {
+    const { id, ...rest } = cidadeData;
+    const payload = { ...rest, tenant_id: TENANT_ID, ativo: true };
+    const { data, error } = id
+      ? await supabase.from('cidades').update(payload).eq('id',id).select().single()
+      : await supabase.from('cidades').insert(payload).select().single();
     if (error) throw error;
-    setCidades(prev => [...prev, data].sort((a,b) => a.nome.localeCompare(b.nome)));
+    setCidades(prev => {
+      const sem = prev.filter(c=>c.id!==data.id);
+      return [...sem, data].sort((a,b)=>a.nome.localeCompare(b.nome));
+    });
     return data;
+  }
+
+  async function addCidade(nome) {
+    return addOuEditarCidade({ nome, estado:'', valor_transferencia:null });
   }
 
   async function addHospital(nome) {
@@ -97,7 +111,7 @@ export default function TransferenciasPage() {
 
   async function buscarSupporte() {
     const [c, h, p, rh] = await Promise.all([
-      supabase.from('cidades').select('id,nome,estado').eq('tenant_id',TENANT_ID).eq('ativo',true).order('nome'),
+      supabase.from('cidades').select('id,nome,estado,valor_transferencia').eq('tenant_id',TENANT_ID).eq('ativo',true).order('nome'),
       supabase.from('hospitais_destino').select('id,nome,cidade_id,cidades:cidade_id(nome)').eq('tenant_id',TENANT_ID).eq('ativo',true).order('nome'),
       supabase.from('prestadores').select('id,nome').eq('tenant_id',TENANT_ID).eq('ativo',true).order('nome'),
       supabase.from('profissionais_rh').select('id,nome,cargo').eq('tenant_id',TENANT_ID).eq('ativo',true).order('nome'),
@@ -145,19 +159,25 @@ export default function TransferenciasPage() {
     }
     setSaving(true);
     try {
-      const { id, ...rest } = formTransf;
-      const km_i = rest.km_inicial ? Number(rest.km_inicial) : null;
-      const km_f = rest.km_final   ? Number(rest.km_final)   : null;
+      const { id } = formTransf;
+      // Payload explícito — evita enviar campos de join (destino, medico, etc.)
       const payload = {
-        ...rest, tenant_id: TENANT_ID,
-        km_inicial: km_i, km_final: km_f,
-        valor: rest.valor ? Number(rest.valor) : null,
-        prestador_id:        rest.prestador_id        || null,
-        enfermeiro_id:       rest.enfermeiro_id        || null,
-        motorista_id:        rest.motorista_id         || null,
-        cidade_origem_id:    rest.cidade_origem_id     || null,
-        cidade_destino_id:   rest.cidade_destino_id    || null,
-        hospital_destino_id: rest.hospital_destino_id  || null,
+        tenant_id:           TENANT_ID,
+        data:                formTransf.data,
+        paciente:            formTransf.paciente            || null,
+        tipo:                formTransf.tipo,
+        status:              formTransf.status,
+        cidade_origem_id:    formTransf.cidade_origem_id    || null,
+        cidade_destino_id:   formTransf.cidade_destino_id   || null,
+        hospital_destino_id: formTransf.hospital_destino_id || null,
+        prestador_id:        formTransf.prestador_id        || null,
+        enfermeiro_id:       formTransf.enfermeiro_id       || null,
+        motorista_id:        formTransf.motorista_id        || null,
+        veiculo:             formTransf.veiculo             || null,
+        km_inicial:          formTransf.km_inicial ? Number(formTransf.km_inicial) : null,
+        km_final:            formTransf.km_final   ? Number(formTransf.km_final)   : null,
+        valor:               formTransf.valor      ? Number(formTransf.valor)      : null,
+        observacoes:         formTransf.observacoes         || null,
       };
 
       const { error } = id
@@ -271,7 +291,11 @@ export default function TransferenciasPage() {
                     <option value="CONTRAREFERENCIA">Contrarreferência</option>
                   </select>
                 </div>
-                <button onClick={buscarTransferencias} disabled={loadingTrans}
+                <button onClick={()=>setModalCidade(true)}
+                className="py-2.5 rounded-xl border border-slate-300 text-slate-600 font-semibold text-sm hover:bg-slate-50 flex items-center justify-center gap-1.5">
+                <Pencil size={13}/> Cidades
+              </button>
+              <button onClick={buscarTransferencias} disabled={loadingTrans}
                   className="py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition disabled:opacity-60 flex items-center justify-center gap-2">
                   <Search size={14} />{loadingTrans ? 'Buscando...' : 'Buscar'}
                 </button>
@@ -397,7 +421,15 @@ export default function TransferenciasPage() {
                 <SelectWithAdd
                   label="Cidade destino"
                   value={formTransf.cidade_destino_id}
-                  onChange={v=>setFormTransf({...formTransf,cidade_destino_id:v})}
+                  onChange={v=>{
+                    const cidade = cidades.find(c=>c.id===v);
+                    setFormTransf({
+                      ...formTransf,
+                      cidade_destino_id: v,
+                      // Auto-preenche valor se a cidade tiver valor configurado
+                      valor: cidade?.valor_transferencia ? String(cidade.valor_transferencia) : formTransf.valor,
+                    });
+                  }}
                   options={cidades.map(c=>({id:c.id,nome:c.nome+(c.estado?` — ${c.estado}`:'')})) }
                   onAdd={addCidade}
                   placeholder="Selecione..."
@@ -413,13 +445,51 @@ export default function TransferenciasPage() {
                   placeholder="Selecione..."
                 />
               </div>
-              <div>
+              <div style={{position:'relative'}}>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Médico responsável</label>
-                <select style={iSx} value={formTransf.prestador_id}
-                  onChange={e=>setFormTransf({...formTransf,prestador_id:e.target.value})}>
-                  <option value="">Selecione...</option>
-                  {prestadores.map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}
-                </select>
+                <input
+                  style={iSx}
+                  placeholder="Digite para filtrar..."
+                  value={buscaMedico || (formTransf.prestador_id ? (prestadores.find(p=>p.id===formTransf.prestador_id)?.nome||'') : '')}
+                  onChange={e=>{
+                    setBuscaMedico(e.target.value);
+                    setShowMedicos(true);
+                    if (!e.target.value) setFormTransf({...formTransf,prestador_id:''});
+                  }}
+                  onFocus={()=>setShowMedicos(true)}
+                  onBlur={()=>setTimeout(()=>setShowMedicos(false),200)}
+                  autoComplete="off"
+                />
+                {showMedicos && buscaMedico && (
+                  <div style={{
+                    position:'absolute',zIndex:100,top:'100%',left:0,right:0,
+                    background:'#fff',border:'1.5px solid #CBD5E1',borderTop:'none',
+                    borderRadius:'0 0 10px 10px',maxHeight:180,overflowY:'auto',
+                    boxShadow:'0 4px 12px rgba(0,0,0,.12)',
+                  }}>
+                    {prestadores
+                      .filter(p=>p.nome.toLowerCase().includes(buscaMedico.toLowerCase()))
+                      .map(p=>(
+                        <div key={p.id}
+                          onMouseDown={()=>{
+                            setFormTransf({...formTransf,prestador_id:p.id});
+                            setBuscaMedico('');
+                            setShowMedicos(false);
+                          }}
+                          style={{padding:'8px 12px',fontSize:13,cursor:'pointer',
+                            borderBottom:'1px solid #f1f5f9'}}
+                          onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
+                          onMouseLeave={e=>e.currentTarget.style.background='#fff'}
+                        >
+                          {p.nome}
+                        </div>
+                      ))
+                    }
+                    {prestadores.filter(p=>p.nome.toLowerCase().includes(buscaMedico.toLowerCase())).length===0 && (
+                      <div style={{padding:'8px 12px',fontSize:12,color:'#94a3b8'}}>Nenhum resultado</div>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Enfermagem</label>
@@ -474,6 +544,87 @@ export default function TransferenciasPage() {
               <Button onClick={salvarTransferencia} disabled={saving}>
                 {saving?'Salvando...':'Salvar'}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal gerenciar cidades e valores ── */}
+      {modalCidade && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto">
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between">
+              <div className="font-extrabold text-slate-900 text-sm">Cidades e valores de transferência</div>
+              <button onClick={()=>setModalCidade(false)} className="p-1.5 rounded-lg hover:bg-slate-100"><X size={15}/></button>
+            </div>
+            <div className="p-5 space-y-3">
+              {/* Form add/edit */}
+              <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                <div className="text-xs font-bold text-slate-500 uppercase">
+                  {formCidadeEdit.id ? 'Editar cidade' : 'Nova cidade'}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2">
+                    <input style={iSx} value={formCidadeEdit.nome} placeholder="Nome da cidade"
+                      onChange={e=>setFormCidadeEdit({...formCidadeEdit,nome:e.target.value})} />
+                  </div>
+                  <input style={iSx} maxLength={2} value={formCidadeEdit.estado} placeholder="UF"
+                    onChange={e=>setFormCidadeEdit({...formCidadeEdit,estado:e.target.value.toUpperCase()})} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor da transferência (R$)</label>
+                  <input type="number" step="0.01" style={iSx} value={formCidadeEdit.valor_transferencia}
+                    placeholder="0,00"
+                    onChange={e=>setFormCidadeEdit({...formCidadeEdit,valor_transferencia:e.target.value})} />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  {formCidadeEdit.id && (
+                    <button onClick={()=>setFormCidadeEdit({id:null,nome:'',estado:'',valor_transferencia:''})}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-100">
+                      Cancelar
+                    </button>
+                  )}
+                  <button
+                    disabled={savingCidade || !formCidadeEdit.nome.trim()}
+                    onClick={async()=>{
+                      setSavingCidade(true);
+                      try {
+                        await addOuEditarCidade({
+                          id: formCidadeEdit.id||undefined,
+                          nome: formCidadeEdit.nome,
+                          estado: formCidadeEdit.estado,
+                          valor_transferencia: formCidadeEdit.valor_transferencia ? Number(formCidadeEdit.valor_transferencia) : null,
+                        });
+                        setFormCidadeEdit({id:null,nome:'',estado:'',valor_transferencia:''});
+                        toast.success('Cidade salva');
+                      } catch(e) { toast.error('Erro',e.message); }
+                      finally { setSavingCidade(false); }
+                    }}
+                    className="px-4 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold disabled:opacity-50 hover:bg-slate-800"
+                  >
+                    {savingCidade ? 'Salvando...' : formCidadeEdit.id ? 'Salvar' : 'Adicionar'}
+                  </button>
+                </div>
+              </div>
+              {/* Lista de cidades */}
+              <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto">
+                {cidades.map(c=>(
+                  <div key={c.id} className="flex items-center justify-between py-2.5">
+                    <div>
+                      <div className="text-sm font-medium text-slate-800">{c.nome}{c.estado?` — ${c.estado}`:''}</div>
+                      {c.valor_transferencia && (
+                        <div className="text-xs text-emerald-600 font-semibold">
+                          Valor: {Number(c.valor_transferencia).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={()=>setFormCidadeEdit({id:c.id,nome:c.nome,estado:c.estado||'',valor_transferencia:c.valor_transferencia||''})}
+                      className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100">
+                      <Pencil size={13}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
