@@ -291,11 +291,7 @@ export default function TransferenciasPage() {
                     <option value="CONTRAREFERENCIA">Contrarreferência</option>
                   </select>
                 </div>
-                <button onClick={()=>setModalCidade(true)}
-                className="py-2.5 rounded-xl border border-slate-300 text-slate-600 font-semibold text-sm hover:bg-slate-50 flex items-center justify-center gap-1.5">
-                <Pencil size={13}/> Cidades
-              </button>
-              <button onClick={buscarTransferencias} disabled={loadingTrans}
+  <button onClick={buscarTransferencias} disabled={loadingTrans}
                   className="py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition disabled:opacity-60 flex items-center justify-center gap-2">
                   <Search size={14} />{loadingTrans ? 'Buscando...' : 'Buscar'}
                 </button>
@@ -414,6 +410,7 @@ export default function TransferenciasPage() {
                   onChange={v=>setFormTransf({...formTransf,cidade_origem_id:v})}
                   options={cidades.map(c=>({id:c.id,nome:c.nome+(c.estado?` — ${c.estado}`:'')})) }
                   onAdd={addCidade}
+                  onClickAdd={()=>{ setFormCidadeEdit({id:null,nome:'',estado:'',valor_transferencia:''}); setModalCidade(true); }}
                   placeholder="Selecione..."
                 />
               </div>
@@ -426,12 +423,12 @@ export default function TransferenciasPage() {
                     setFormTransf({
                       ...formTransf,
                       cidade_destino_id: v,
-                      // Auto-preenche valor se a cidade tiver valor configurado
                       valor: cidade?.valor_transferencia ? String(cidade.valor_transferencia) : formTransf.valor,
                     });
                   }}
                   options={cidades.map(c=>({id:c.id,nome:c.nome+(c.estado?` — ${c.estado}`:'')})) }
                   onAdd={addCidade}
+                  onClickAdd={()=>{ setFormCidadeEdit({id:null,nome:'',estado:'',valor_transferencia:''}); setModalCidade(true); }}
                   placeholder="Selecione..."
                 />
               </div>

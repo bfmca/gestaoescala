@@ -22,6 +22,7 @@ const iSx = {
 
 export default function SelectWithAdd({
   label, value, onChange, options = [], onAdd,
+  onClickAdd,   // se passado, o botão + chama essa função em vez do modal padrão
   placeholder = 'Selecione...', required = false, disabled = false,
 }) {
   const [showModal, setShowModal] = useState(false);
@@ -71,7 +72,7 @@ export default function SelectWithAdd({
 
         <button
           type="button"
-          onClick={() => { setShowModal(true); setNovoNome(''); setError(''); setTimeout(() => inputRef.current?.focus(), 50); }}
+          onClick={() => { if (onClickAdd) { onClickAdd(); } else { setShowModal(true); setNovoNome(''); setError(''); setTimeout(() => inputRef.current?.focus(), 50); } }}
           title={`Adicionar novo ${label?.toLowerCase() || 'item'}`}
           style={{
             padding: '9px 11px',

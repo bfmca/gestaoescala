@@ -138,6 +138,7 @@ export default function ImpressaoEscalaPage() {
   return (
     <div style={{ fontFamily:'Arial,sans-serif',padding:'12px 16px',maxWidth:900,margin:'0 auto',background:'#fff' }}>
       <style>{PRINT_CSS}</style>
+      <style>{'@media print { @page { size: A4 landscape; margin: 10mm 12mm; } }'}</style>
 
       {/* Cabeçalho */}
       <div style={{ display:'flex',alignItems:'center',marginBottom:12,gap:16 }}>

@@ -285,6 +285,56 @@ export default function ConfiguracoesPage() {
           corFundo={form.cor_fundo}
         />
       </div>
+
+      {/* ── Configurações de relatório e calendário ── */}
+      <Card className="mt-6">
+        <div className="p-6 space-y-5">
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1">Configurações de relatório e calendário</h3>
+            <p className="text-sm text-slate-400">Defina a cidade de assinatura dos relatórios e o primeiro dia da semana no calendário.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Cidade para assinatura dos relatórios
+            </label>
+            <input
+              value={form.cidade_assinatura || ''}
+              onChange={e => setForm({ ...form, cidade_assinatura: e.target.value })}
+              placeholder="Ex: Brasilândia-MS"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-700"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Primeiro dia da semana (calendário e impressão da escala)
+            </label>
+            <div className="flex gap-3">
+              {[{v:0, l:'Dom → Sáb (padrão)'}, {v:1, l:'Seg → Dom'}].map(op => (
+                <button
+                  key={op.v}
+                  type="button"
+                  onClick={() => setForm({ ...form, primeiro_dia_semana: op.v })}
+                  className={`flex-1 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
+                    form.primeiro_dia_semana === op.v
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {op.l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={salvar} disabled={saving}>
+              {saving ? 'Salvando...' : 'Salvar configurações'}
+            </Button>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
