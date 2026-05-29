@@ -72,7 +72,7 @@ export default function ImpressaoRelatorioServicos() {
           <tr style={{ borderBottom:'1px solid #eee' }}>
             <td style={{ padding:'8px 8px', fontSize:11, verticalAlign:'top' }}>{periodo}</td>
             <td style={{ padding:'8px 8px', fontSize:11 }}>
-              {prestador.descricao_contrato || 'Serviços prestados conforme contrato'}
+              {`${prestador.descricao_contrato || 'Serviços prestados conforme contrato'}. Ref. ${MESES[mes]}/${ano}`}
             </td>
             <td style={{ padding:'8px 8px', fontSize:11, textAlign:'right' }}>
               {moeda(prestador.valor_contrato)}

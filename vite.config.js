@@ -10,5 +10,18 @@ export default defineConfig(({ mode }) => {
     define: {
       __APP_ENV__: JSON.stringify(env.VITE_ENV || mode),
     },
+
+    resolve: {
+      extensions: ['.jsx', '.js', '.tsx', '.ts', '.json'],
+    },
+
+    build: {
+      rollupOptions: {
+        onwarn(warning, warn) {
+          if (warning.code === 'MODULE_LEVEL_DIRECTIVE') return;
+          warn(warning);
+        },
+      },
+    },
   };
 });
