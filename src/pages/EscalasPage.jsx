@@ -82,6 +82,7 @@ export default function EscalasPage() {
     setForm({
       ...formInicial,
       ...escala,
+      ordem_relatorio: escala.ordem_relatorio || 99,
       cor: escala.cor || '#0F172A',
     });
 
@@ -348,6 +349,19 @@ export default function EscalasPage() {
                     })
                   }
                   className="w-full rounded-xl border border-slate-300 px-4 py-3"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Ordem no consolidado
+                </label>
+                <input
+                  type="number" min="1" max="99"
+                  value={form.ordem_relatorio || 99}
+                  onChange={e => setForm({ ...form, ordem_relatorio: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3"
+                  placeholder="Ex: 1 = aparece primeiro"
                 />
               </div>
 

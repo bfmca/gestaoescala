@@ -95,7 +95,10 @@ export default function ConfiguracoesPage() {
 
         cor_fundo: data.cor_fundo || '#F1F5F9',
         cidade_assinatura: data.cidade_assinatura || 'Brasilândia-MS',
-        primeiro_dia_semana: data.primeiro_dia_semana ?? 0,
+        primeiro_dia_semana:  data.primeiro_dia_semana  ?? 0,
+        assinante_presidente:  data.assinante_presidente  || '',
+        assinante_coordenador: data.assinante_coordenador || '',
+        assinante_financeiro:  data.assinante_financeiro  || '',
       });
     } finally {
       setLoading(false);
@@ -119,7 +122,10 @@ export default function ConfiguracoesPage() {
 
           cor_fundo: form.cor_fundo,
           cidade_assinatura: form.cidade_assinatura,
-          primeiro_dia_semana: form.primeiro_dia_semana,
+          primeiro_dia_semana:  form.primeiro_dia_semana,
+          assinante_presidente:  form.assinante_presidente,
+          assinante_coordenador: form.assinante_coordenador,
+          assinante_financeiro:  form.assinante_financeiro,
         })
         .eq('id', TENANT_ID);
 
@@ -324,6 +330,27 @@ export default function ConfiguracoesPage() {
                 >
                   {op.l}
                 </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-bold text-slate-700 text-sm mb-3">Assinantes do relatório consolidado</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                { field:'assinante_financeiro',  label:'Departamento Financeiro'   },
+                { field:'assinante_coordenador', label:'Coordenação Administrativa' },
+                { field:'assinante_presidente',  label:'Presidente'                },
+              ].map(({ field, label }) => (
+                <div key={field}>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">{label}</label>
+                  <input
+                    value={form[field] || ''}
+                    onChange={e => setForm({ ...form, [field]: e.target.value })}
+                    placeholder={label}
+                    className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-slate-700"
+                  />
+                </div>
               ))}
             </div>
           </div>
