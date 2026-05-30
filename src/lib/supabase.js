@@ -12,3 +12,13 @@ export const supabase = createClient(config.supabase.url, config.supabase.key, {
     storageKey:         'gestaoescala-auth',
   },
 });
+
+/** Branding cadastrado no Painel Master (schema public) */
+export const supabasePublic = createClient(config.supabase.url, config.supabase.key, {
+  db: { schema: 'public' },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storageKey: 'gestaoescala-auth',
+  },
+});

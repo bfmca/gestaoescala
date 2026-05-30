@@ -10,7 +10,7 @@ export const config = {
     schema: import.meta.env.VITE_SUPABASE_SCHEMA || 'appescala',
   },
 
-  // Tenant fixo — pode ser movido para .env se o sistema for multi-tenant
+  // UUID do cliente — deve ser o mesmo id em public.tenants (Painel Master)
   tenantId: import.meta.env.VITE_TENANT_ID || '7190dac7-342c-408f-81df-890c194ccfad',
 };
 

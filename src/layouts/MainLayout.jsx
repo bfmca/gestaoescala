@@ -6,42 +6,15 @@ import {
   TrendingUp, Ambulance,
 } from 'lucide-react';
 
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { TENANT_ID } from '../config';
-
-const THEME_CACHE_KEY = `gestaoescala-theme-${TENANT_ID}`;
-
-const defaultTheme = {
-  nomeSistema: 'Escala Médica',
-  logo: 'https://placehold.co/180x70/ffffff/0f172a?text=LOGO',
-  cores: { fundo: '#F1F5F9', sidebar: '#0F172A', secundaria: '#D4A62A', textoClaro: '#CBD5E1' },
-};
-
-// Lê cache do localStorage imediatamente — sem delay visual
-function lerThemeCache() {
-  try {
-    const raw = localStorage.getItem(THEME_CACHE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function salvarThemeCache(theme) {
-  try { localStorage.setItem(THEME_CACHE_KEY, JSON.stringify(theme)); } catch {}
-}
-
-function montarTheme(d) {
-  return {
-    nomeSistema: d.nome_sistema  || defaultTheme.nomeSistema,
-    logo:        d.logo_url      || defaultTheme.logo,
-    cores: {
-      fundo:      d.cor_fundo      || defaultTheme.cores.fundo,
-      sidebar:    d.cor_primaria   || defaultTheme.cores.sidebar,
-      secundaria: d.cor_secundaria || defaultTheme.cores.secundaria,
-      textoClaro: '#CBD5E1',
-    },
-  };
-}
+import {
+  carregarTemaTenant,
+  defaultTheme,
+  lerThemeCache,
+  montarTheme,
+  salvarThemeCache,
+} from '../lib/tenantTheme';
 
 const MENUS = {
   MASTER: [
@@ -113,23 +86,23 @@ const MENUS = {
 };
 
 export default function MainLayout({ children, onChangePass }) {
-  const { usuario, perfil, logout } = useAuth();
+  const { usuario, perfil, logout, tenantId } = useAuth();
   const location = useLocation();
+  const tid = tenantId || TENANT_ID;
 
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [openGroups, setOpenGroups] = useState({ plantoes: true, cadastros: false });
 
-  // ── Tema: carrega do cache imediatamente, depois atualiza do Supabase ──
-  const [theme, setTheme] = useState(() => lerThemeCache() || defaultTheme);
+  const [theme, setTheme] = useState(() => lerThemeCache(tid) || defaultTheme);
 
   const tabs = MENUS[perfil] || [];
 
   useEffect(() => {
     carregarTema();
-    const fn = e => aplicarTheme(montarTheme(e.detail));
+    const fn = (e) => aplicarTheme(montarTheme(e.detail));
     window.addEventListener('tenant-theme-updated', fn);
     return () => window.removeEventListener('tenant-theme-updated', fn);
-  }, []);
+  }, [tid]);
 
   useEffect(() => {
     const p = location.pathname;
@@ -140,18 +113,13 @@ export default function MainLayout({ children, onChangePass }) {
   }, [location.pathname]);
 
   async function carregarTema() {
-    const { data, error } = await supabase
-      .from('tenants')
-      .select('nome_sistema, logo_url, cor_primaria, cor_secundaria, cor_fundo')
-      .eq('id', TENANT_ID)
-      .single();
-    if (error || !data) return;
-    aplicarTheme(montarTheme(data));
+    const t = await carregarTemaTenant(tid);
+    if (t) aplicarTheme(t);
   }
 
   function aplicarTheme(t) {
     setTheme(t);
-    salvarThemeCache(t); // persiste para próxima abertura
+    salvarThemeCache(tid, t);
   }
 
   function toggleGroup(id) {

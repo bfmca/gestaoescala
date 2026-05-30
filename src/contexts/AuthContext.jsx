@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { TENANT_ID } from '../config';
+import { consumeSsoFromUrl } from '../lib/tenantBranding';
+import { carregarTemaTenant } from '../lib/tenantTheme';
 
 const AuthContext = createContext(null);
 
@@ -83,6 +85,19 @@ async function sincronizarSDK(token, refreshToken) {
   } catch {}
 }
 
+function resolveTenantId(perfil) {
+  return perfil?.tenant_id || TENANT_ID;
+}
+
+async function aplicarBrandingTenant(tenantId) {
+  if (!tenantId) return;
+  try {
+    await carregarTemaTenant(tenantId, { checkModule: false });
+  } catch (err) {
+    console.warn('[Auth] branding:', err.message);
+  }
+}
+
 // ── Provider ──────────────────────────────────────────────────
 export function AuthProvider({ children }) {
   const [token,      setToken]      = useState(null);
@@ -90,6 +105,18 @@ export function AuthProvider({ children }) {
   const [usuario,    setUsuario]    = useState(undefined);
   const [loading,    setLoading]    = useState(true);
   const [mustChange, setMustChange] = useState(false);
+
+  async function finalizarSessao(tok, ref, user, perfil) {
+    const forceChange = user?.user_metadata?.must_change_password === true;
+    setToken(tok);
+    setAuthUser(user);
+    setMustChange(forceChange);
+    setUsuario(forceChange ? null : perfil);
+
+    if (!forceChange && perfil) {
+      await aplicarBrandingTenant(resolveTenantId(perfil));
+    }
+  }
 
   useEffect(() => {
     // Escuta eventos do SDK — especialmente PASSWORD_RECOVERY
@@ -129,28 +156,49 @@ export function AuthProvider({ children }) {
         await supabase.auth.signOut();
         setUsuario(null);
       } else {
-        const forceChange = saved.user.user_metadata?.must_change_password === true;
-        setToken(saved.token);
-        setAuthUser(saved.user);
-        setMustChange(forceChange);
-        setUsuario(forceChange ? null : perfil);
+        await finalizarSessao(saved.token, saved.refreshToken, saved.user, perfil);
       }
       setLoading(false);
     }
 
-    // Verifica se há token de recovery na URL antes de restaurar sessão normal
-    const hash = window.location.hash;
-    if (hash.includes('type=recovery')) {
-      // Deixa o onAuthStateChange tratar — ele vai disparar PASSWORD_RECOVERY
-      console.log('[Auth] Recovery token detectado na URL');
-      // Não chama restaurar() agora — aguarda o evento PASSWORD_RECOVERY
-      // Safety timeout: se o evento não vier em 5s, libera o loading
-      setTimeout(() => {
-        setLoading(prev => { if (prev) { setUsuario(null); return false; } return prev; });
-      }, 5000);
-    } else {
-      restaurar();
+    async function bootstrap() {
+      const hash = window.location.hash;
+
+      if (hash.includes('type=recovery')) {
+        console.log('[Auth] Recovery token detectado na URL');
+        setTimeout(() => {
+          setLoading(prev => { if (prev) { setUsuario(null); return false; } return prev; });
+        }, 5000);
+        return;
+      }
+
+      try {
+        const ssoSession = await consumeSsoFromUrl();
+        if (ssoSession) {
+          const tok = ssoSession.access_token;
+          const ref = ssoSession.refresh_token || '';
+          salvarSessao(tok, ref, ssoSession.user);
+          await sincronizarSDK(tok, ref);
+          const perfil = await buscarPerfil(tok, ssoSession.user.id);
+          if (perfil) {
+            await finalizarSessao(tok, ref, ssoSession.user, perfil);
+          } else {
+            setToken(tok);
+            setAuthUser(ssoSession.user);
+            setUsuario(null);
+            await aplicarBrandingTenant(TENANT_ID);
+          }
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('[Auth] SSO:', err.message);
+      }
+
+      await restaurar();
     }
+
+    bootstrap();
 
     return () => listener?.subscription?.unsubscribe();
   }, []);
@@ -172,6 +220,7 @@ export function AuthProvider({ children }) {
     if (!forceChange) {
       const perfil = await buscarPerfil(tok, user.id);
       setUsuario(perfil);
+      await aplicarBrandingTenant(resolveTenantId(perfil));
     } else {
       setUsuario(null);
     }
@@ -205,6 +254,7 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const tenantId         = resolveTenantId(usuario);
   const session        = token ? { access_token: token, user: authUser } : null;
   const perfil         = usuario?.perfil || null;
   const isMaster       = perfil === 'MASTER';
@@ -214,7 +264,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      session, usuario, loading, mustChange,
+      session, usuario, tenantId, loading, mustChange,
       login, logout, trocarSenha,
       perfil, isMaster, isAdmin, isOperador, isVisualizador,
       podeGerenciarUsuarios: isMaster,

@@ -1,4 +1,6 @@
 import { TENANT_ID } from '../config';
+import { dispatchThemeUpdated } from '../lib/tenantTheme';
+import { loadTenantBrandingRow } from '../lib/tenantBranding';
 import { useEffect, useState } from 'react';
 
 import { supabase } from '../lib/supabase';
@@ -161,11 +163,34 @@ export default function ConfiguracoesPage() {
     <div>
       <PageHeader
         title="Configurações"
-        subtitle="Identidade visual do cliente"
+        subtitle="Identidade visual — sincronizada automaticamente do Painel Master (logo, cores e nome)"
         actions={
-          <Button onClick={salvar}>
-            {saving ? 'Salvando...' : 'Salvar alterações'}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  const row = await loadTenantBrandingRow(TENANT_ID);
+                  if (row) {
+                    setForm((f) => ({ ...f, ...row }));
+                    dispatchThemeUpdated(row);
+                    setMensagem('Identidade atualizada do Painel Master.');
+                  } else {
+                    setMensagem('Não foi possível carregar do Painel Master.');
+                  }
+                } finally {
+                  setSaving(false);
+                  setTimeout(() => setMensagem(''), 3000);
+                }
+              }}
+            >
+              Sincronizar do Painel
+            </Button>
+            <Button onClick={salvar}>
+              {saving ? 'Salvando...' : 'Salvar alterações'}
+            </Button>
+          </div>
         }
       />
 
