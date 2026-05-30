@@ -1,5 +1,15 @@
 {
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "https://educacaoemsaude.vercel.app/",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "destination": "https://educacaoemsaude.vercel.app/esc/:path*",
+      "permanent": true
+    }
+  ],
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
